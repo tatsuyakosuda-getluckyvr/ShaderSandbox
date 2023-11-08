@@ -13,8 +13,12 @@ half4 _DebugMipmapTexArray_ST;
 half4 _DebugMipmapTex_ST;
 half4 _BaseColor;
 half4 _DiffuseColor;
+half4 _DiffuseColor2;
 half4 _LightDirection;
 half4 _RimColor;
+half4 _RimColor2;
+half4 _GradientScale;
+half _GradientAngle;
 half _RimPower;
 half _Smoothness;
 half _Metallic;
@@ -38,7 +42,7 @@ TEXTURE2D_ARRAY(_MARMapArray); SAMPLER(sampler_MARMapArray);
 
 half4 SampleAlbedo(half2 uv)
 {
-#if _TEX_ARRAY
+#ifdef _TEX_ARRAY
     half4 col = SAMPLE_TEXTURE2D_ARRAY(_BaseMapArray, sampler_BaseMapArray, uv, _BaseMapIndex) * _BaseColor;
 #else
     half4 col = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, uv) * _BaseColor;
@@ -53,8 +57,8 @@ inline void AlphaDiscard(half alpha)
 
 half3 SampleNormal(half2 uv)
 {
-#if _NORMALMAP
-#if _TEX_ARRAY
+#ifdef _NORMALMAP
+#ifdef _TEX_ARRAY
     half3 normalTS = UnpackNormalScale(SAMPLE_TEXTURE2D_ARRAY(_NormalMapArray, sampler_NormalMapArray, uv, _NormalMapIndex), _NormalStrength);
 #else
     half3 normalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, uv), _NormalStrength);
@@ -67,8 +71,8 @@ half3 SampleNormal(half2 uv)
 
 half3 SampleMAR(half2 uv)
 {
-#if _MARMAP
-#if _TEX_ARRAY
+#ifdef _MARMAP
+#ifdef _TEX_ARRAY
     half3 res = SAMPLE_TEXTURE2D_ARRAY(_MARMapArray, sampler_MARMapArray, uv, _MARMapIndex).rgb;
 #else
     half3 res = SAMPLE_TEXTURE2D(_MARMap, sampler_MARMap, uv).rgb;
@@ -88,13 +92,16 @@ CustomLight GetCustomLight()
     light.diffuseColor = _DiffuseColor.rgb;
     light.lightDirection = _LightDirection.rgb;
     light.rimLightColor = _RimColor.rgb;
+    light.rimLightColor2 = _RimColor2.rgb;
     light.rimLightPower = _RimPower;
+    light.gradientScale = _GradientScale;
+    light.gradientAngle = _GradientAngle;
     return light;
 }
 
 half4 CalculateFinalColor(InputData inputData, SurfaceData surfaceData)
 {
-#if _UNLIT
+#ifdef _UNLIT
     half4 col = UniversalFragmentUnlit(inputData, surfaceData);
 #elif _SIMPLELIT
     half4 col = UniversalFragmentBlinnPhong(inputData, surfaceData);
@@ -108,7 +115,7 @@ half4 CalculateFinalColor(InputData inputData, SurfaceData surfaceData)
 
 half4 DebugMipmap(float2 uv, half4 col)
 {
-#if _TEX_ARRAY
+#ifdef _TEX_ARRAY
     uv = (uv - _BaseMapArray_ST.zw) / _BaseMapArray_ST.xy;
     col *= SAMPLE_TEXTURE2D_ARRAY(_DebugMipmapTexArray, sampler_DebugMipmapTexArray, TRANSFORM_TEX(uv, _DebugMipmapTexArray), 0);
 #else

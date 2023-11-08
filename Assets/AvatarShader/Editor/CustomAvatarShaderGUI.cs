@@ -42,12 +42,16 @@ public class CustomAvatarShaderGUI : ShaderGUI
         public MaterialProperty occlusion;
         public MaterialProperty cutoff;
         public MaterialProperty diffuseColor;
+        public MaterialProperty diffuseColor2;
         public MaterialProperty eulerLightDirection;
         public MaterialProperty lightDirection;
         public MaterialProperty rimColor;
+        public MaterialProperty rimColor2;
         public MaterialProperty rimPower;
+        public MaterialProperty gradientScale;
         public MaterialProperty debugMipmapTex;
         public MaterialProperty debugMipmapTexArray;
+        public MaterialProperty gradientAngle;
     }
 
     private RenderMode _renderMode;
@@ -62,6 +66,8 @@ public class CustomAvatarShaderGUI : ShaderGUI
     private bool _enableRimLight;
     private bool _enableTex2DArray;
     private bool _enableDebugMipmap;
+    private bool _enableRadialGradient;
+    private bool _enableGradient;
 
     private static readonly string UNLIT_KEYWORD = "_UNLIT";
     private static readonly string SIMPLE_LIT_KEYWORD = "_SIMPLELIT";
@@ -173,12 +179,16 @@ public class CustomAvatarShaderGUI : ShaderGUI
             _properties.occlusion = properties.FirstOrDefault(x => x.name == "_Occlusion");
             _properties.cutoff = properties.FirstOrDefault(x => x.name == "_Cutoff");
             _properties.diffuseColor = properties.FirstOrDefault(x => x.name == "_DiffuseColor");
+            _properties.diffuseColor2 = properties.FirstOrDefault(x => x.name == "_DiffuseColor2");
             _properties.eulerLightDirection = properties.FirstOrDefault(x => x.name == "_EulerLightDirection");
             _properties.lightDirection = properties.FirstOrDefault(x => x.name == "_LightDirection");
             _properties.rimColor = properties.FirstOrDefault(x => x.name == "_RimColor");
+            _properties.rimColor2 = properties.FirstOrDefault(x => x.name == "_RimColor2");
+            _properties.gradientScale = properties.FirstOrDefault(x => x.name == "_GradientScale");
             _properties.rimPower = properties.FirstOrDefault(x => x.name == "_RimPower");
             _properties.debugMipmapTex = properties.FirstOrDefault(x => x.name == "_DebugMipmapTex");
             _properties.debugMipmapTexArray = properties.FirstOrDefault(x => x.name == "_DebugMipmapTexArray");
+            _properties.gradientAngle = properties.FirstOrDefault(x => x.name == "_GradientAngle");
         }
 
         Initialize();
@@ -190,6 +200,8 @@ public class CustomAvatarShaderGUI : ShaderGUI
         _enableRimLight = _target.IsKeywordEnabled("_RIM_LIGHT");
         _enableTex2DArray = _target.IsKeywordEnabled("_TEX_ARRAY");
         _enableDebugMipmap = _target.IsKeywordEnabled("_DEBUG_MIPMAP");
+        _enableRadialGradient = _target.IsKeywordEnabled("_RADIAL_GRADIENT_LIGHT");
+        _enableGradient = _target.IsKeywordEnabled("_GRADIENT_LIGHT");
 
         _isOpenSurfaceOptions = CoreEditorUtils.DrawHeaderFoldout("Surface Options", _isOpenSurfaceOptions);
 
@@ -334,6 +346,38 @@ public class CustomAvatarShaderGUI : ShaderGUI
             if (_isOpenLightSettings)
             {
                 EditorGUI.BeginChangeCheck();
+                _enableGradient = EditorGUILayout.Toggle("Enable Gradient", _enableGradient);
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated gradient enabled");
+
+                    if (_enableGradient) { _target.EnableKeyword("_GRADIENT_LIGHT"); }
+                    else { _target.DisableKeyword("_GRADIENT_LIGHT"); }
+                }
+
+                if (_enableGradient)
+                {
+                    EditorGUI.BeginChangeCheck();
+                    _enableRadialGradient = EditorGUILayout.Toggle("Enable Radial Gradient", _enableRadialGradient);
+
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        Undo.RecordObject(_target, "Updated radial gradient enabled");
+
+                        if (_enableRadialGradient) { _target.EnableKeyword("_RADIAL_GRADIENT_LIGHT"); }
+                        else { _target.DisableKeyword("_RADIAL_GRADIENT_LIGHT"); }
+                    }
+
+                    materialEditor.VectorProperty(_properties.gradientScale, _properties.gradientScale.displayName);
+
+                    if (!_enableRadialGradient)
+                    {
+                        materialEditor.RangeProperty(_properties.gradientAngle, _properties.gradientAngle.displayName);
+                    }
+                }
+
+                EditorGUI.BeginChangeCheck();
                 _enableDiffuseColor = EditorGUILayout.Toggle("Enable Diffuse Color", _enableDiffuseColor);
 
                 if (EditorGUI.EndChangeCheck())
@@ -369,7 +413,16 @@ public class CustomAvatarShaderGUI : ShaderGUI
                         }
                     }
 
-                    materialEditor.ColorProperty(_properties.diffuseColor, _properties.diffuseColor.displayName);
+                    if (_enableGradient)
+                    {
+                        materialEditor.ColorProperty(_properties.diffuseColor, _properties.diffuseColor.displayName);
+                        materialEditor.ColorProperty(_properties.diffuseColor2, _properties.diffuseColor2.displayName);
+                    }
+                    else
+                    {
+                        materialEditor.ColorProperty(_properties.diffuseColor, _properties.diffuseColor.displayName);
+                    }
+
                     _properties.eulerLightDirection.vectorValue = EditorGUILayout.Vector2Field("Light Direction", _properties.eulerLightDirection.vectorValue);
                     var dir = _properties.eulerLightDirection.vectorValue;
                     var matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.Euler(dir.x, dir.y, dir.z), Vector3.one);
@@ -401,7 +454,17 @@ public class CustomAvatarShaderGUI : ShaderGUI
 
                 if (_enableRimLight)
                 {
-                    materialEditor.ColorProperty(_properties.rimColor, _properties.rimColor.displayName);
+                    if (_enableGradient)
+                    {
+                        materialEditor.ColorProperty(_properties.rimColor, _properties.rimColor.displayName);
+                        materialEditor.ColorProperty(_properties.rimColor2, _properties.rimColor2.displayName);
+                    }
+                    else
+                    {
+                        materialEditor.ColorProperty(_properties.rimColor, _properties.rimColor.displayName);
+                        _properties.rimColor2.colorValue = _properties.rimColor.colorValue;
+                    }
+
                     materialEditor.RangeProperty(_properties.rimPower, _properties.rimPower.displayName);
                 }
             }

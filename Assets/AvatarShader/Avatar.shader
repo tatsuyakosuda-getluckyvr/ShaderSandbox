@@ -18,8 +18,12 @@
         _Occlusion ("Ambient Occlusion", Range(0, 1)) = 1
         _Cutoff ("Alpha Cutoff", Range(0, 1)) = 0.5
         _DiffuseColor ("Diffuse Color", Color) = (1, 1, 1, 1)
+        _DiffuseColor2 ("Diffuse Color2", Color) = (1, 1, 1, 1)
         _LightDirection ("Light Direction", Vector) = (0, 0, 0, 0)
         _RimColor ("Rim Light Color", Color) = (1, 1, 1, 1)
+        _RimColor2 ("Rim Light Color2", Color) = (1, 1, 1, 1)
+        _GradientScale ("Gradient Scale", Vector) = (0, 0, 1, 1)
+        _GradientAngle ("Gradient Angle", Range(-180, 180)) = 0
         _RimPower ("Rim Light Power", Range(0.0, 5.0)) = 4.0
 
         [HideInInspector] _EulerLightDirection("Light Dirrection (Euler)", Vector) = (90, 0, 0, 0)
@@ -59,6 +63,8 @@
             #pragma shader_feature_local_fragment _ _RIM_LIGHT
             #pragma shader_feature_local_fragment _ _HALF_LAMBERT _MINNAERT
             #pragma shader_feature_local_fragment _ _DEBUG_MIPMAP
+            #pragma shader_feature_local_fragment _ _GRADIENT_LIGHT
+            #pragma shader_feature_local_fragment _ _RADIAL_GRADIENT_LIGHT
             #pragma shader_feature_local _ _TEX_ARRAY
             #pragma shader_feature_local _ _NORMALMAP
 
@@ -70,6 +76,7 @@
     SubShader
     {
         Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" }
+        // without normal map
         LOD 200
 
         Pass
@@ -95,8 +102,57 @@
             #pragma shader_feature_local_fragment _ _RIM_LIGHT
             #pragma shader_feature_local_fragment _ _HALF_LAMBERT _MINNAERT
             #pragma shader_feature_local_fragment _ _DEBUG_MIPMAP
+            #pragma shader_feature_local_fragment _ _GRADIENT_LIGHT
+            #pragma shader_feature_local_fragment _ _RADIAL_GRADIENT_LIGHT
             #pragma shader_feature_local _ _TEX_ARRAY
-            //#pragma shader_feature_local _ _NORMALMAP
+            #pragma shader_feature_local _ _NORMALMAP
+
+            #undef _NORMALMAP
+
+            #include "HLSL/AvatarInput.hlsl"
+            #include "HLSL/AvatarForwardPass.hlsl"
+            ENDHLSL
+        }
+    }
+    SubShader
+    {
+        Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" }
+        // unlit
+        LOD 100
+
+        Pass
+        {
+            Name "UniversalForward"
+            Tags {"LightMode" = "UniversalForward"}
+
+            Blend [_SrcBlend][_DstBlend]
+            ZWrite [_ZWrite]
+            Cull [_Cull]
+
+            HLSLPROGRAM
+            #pragma vertex AvatarPassVertex
+            #pragma fragment AvatarPassFragment
+
+            #pragma multi_compile_fragment _ DEBUG_DISPLAY
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
+
+            #pragma shader_feature_local_fragment _ _SIMPLELIT _UNLIT _CUSTOMLIT
+            #pragma shader_feature_local_fragment _ _MARMAP
+            #pragma shader_feature_local_fragment _ _DIFFUSE_COLOR
+            #pragma shader_feature_local_fragment _ _REFLECTION
+            #pragma shader_feature_local_fragment _ _RIM_LIGHT
+            #pragma shader_feature_local_fragment _ _HALF_LAMBERT _MINNAERT
+            #pragma shader_feature_local_fragment _ _DEBUG_MIPMAP
+            #pragma shader_feature_local_fragment _ _GRADIENT_LIGHT
+            #pragma shader_feature_local_fragment _ _RADIAL_GRADIENT_LIGHT
+            #pragma shader_feature_local _ _TEX_ARRAY
+            #pragma shader_feature_local _ _NORMALMAP
+
+            #undef _NORMALMAP
+            #undef _MARMAP
+            #undef _SIMPLELIT
+            #undef _CUSTOMLIT
+            #define _UNLIT
 
             #include "HLSL/AvatarInput.hlsl"
             #include "HLSL/AvatarForwardPass.hlsl"

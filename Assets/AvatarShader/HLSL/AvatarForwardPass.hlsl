@@ -8,7 +8,7 @@ struct Attributes
     half4 positionOS : POSITION;
     half3 normalOS   : NORMAL;
     half4 tangentOS  : TANGENT;
-#if UNITY_ANY_INSTANCING_ENABLED
+#ifdef UNITY_ANY_INSTANCING_ENABLED
     uint instanceID : INSTANCEID_SEMANTIC;
 #endif
 };
@@ -19,12 +19,12 @@ struct Varyings
     half4 positionCS : SV_POSITION;
     half3 positionWS : TEXCOORD1;
     half3 normalWS   : TEXCOORD2;
-#if _NORMALMAP
+#ifdef _NORMALMAP
     half4 tangentWS  : TEXCOORD3;
 #endif
     DECLARE_LIGHTMAP_OR_SH(lightmapUV, vertexSH, 4);
     half3 vertexLight : TEXVCOORD5;
-#if UNITY_ANY_INSTANCING_ENABLED
+#ifdef UNITY_ANY_INSTANCING_ENABLED
     uint instanceID : CUSTOM_INSTANCE_ID;
 #endif
 #if (defined(UNITY_STEREO_MULTIVIEW_ENABLED)) || (defined(UNITY_STEREO_INSTANCING_ENABLED) && (defined(SHADER_API_GLES3) || defined(SHADER_API_GLCORE)))
@@ -45,12 +45,12 @@ Varyings AvatarPassVertex(Attributes input)
     o.positionCS = TransformObjectToHClip(input.positionOS.xyz);
     o.positionWS = TransformObjectToWorld(input.positionOS.xyz);
     o.normalWS = TransformObjectToWorldNormal(input.normalOS);
-#if _TEX_ARRAY
+#ifdef _TEX_ARRAY
     o.uv = TRANSFORM_TEX(input.uv, _BaseMapArray);
 #else
     o.uv = TRANSFORM_TEX(input.uv, _BaseMap);
 #endif
-#if _NORMALMAP
+#ifdef _NORMALMAP
     o.tangentWS = half4(TransformObjectToWorldDir(input.tangentOS.xyz), input.tangentOS.w);
 #endif
     OUTPUT_LIGHTMAP_UV(input.lightmapUV, unity_LightmapST, o.lightmapUV);
@@ -66,7 +66,7 @@ inline void InitializeInputData(Varyings input, half3 normalTS, out InputData li
     lightingInput.viewDirectionWS = GetWorldSpaceNormalizeViewDir(input.positionWS); // In ShaderVariablesFunctions.hlsl
     lightingInput.shadowCoord = TransformWorldToShadowCoord(input.positionWS); // In Shadows.hlsl
     lightingInput.positionCS = input.positionCS;
-#if _NORMALMAP
+#ifdef _NORMALMAP
     half3x3 tangent2World = CreateTangentToWorld(input.normalWS, input.tangentWS.xyz, input.tangentWS.w);
     half3 normalWS = normalize(TransformTangentToWorld(normalTS, tangent2World));
     lightingInput.tangentToWorld = tangent2World;
@@ -106,7 +106,7 @@ half4 AvatarPassFragment(Varyings input) : SV_Target
     InitializeInputData(input, surfaceInput.normalTS, lightingInput);
 
     half4 col = CalculateFinalColor(lightingInput, surfaceInput);
-#if _DEBUG_MIPMAP
+#ifdef _DEBUG_MIPMAP
     col = DebugMipmap(input.uv, col);
 #endif
     return col;

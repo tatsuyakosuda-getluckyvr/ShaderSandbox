@@ -12,7 +12,7 @@ public static class ShaderLOD
 #if !UNITY_EDITOR && UNITY_ANDROID
         Shader.Find(AVATAR_SHADER).maximumLOD = 200;
 #else
-        Shader.Find(AVATAR_SHADER).maximumLOD = 300;
+        Shader.Find(AVATAR_SHADER).maximumLOD = 100;
 #endif
     }
 
