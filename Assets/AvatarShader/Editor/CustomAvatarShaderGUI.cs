@@ -245,7 +245,7 @@ public class CustomAvatarShaderGUI : ShaderGUI
                 materialEditor.TexturePropertySingleLine(new GUIContent("Base Map"), _properties.baseMap, _properties.baseColor);
             }
 
-            if (_renderMode == RenderMode.UNITY_LIT || _renderMode == RenderMode.CUSTOM_LIT)
+            if (_renderMode != RenderMode.UNITY_UNLIT)
             {
                 EditorGUI.BeginChangeCheck();
                 _enableMARMap = EditorGUILayout.Toggle("Enable MAR Map", _enableMARMap);
@@ -270,43 +270,50 @@ public class CustomAvatarShaderGUI : ShaderGUI
                         materialEditor.TexturePropertySingleLine(new GUIContent("MAR Map", "Metallic(R) AO(G) Roughness(B)"), _properties.marMap, null);
                     }
 
-                    materialEditor.RangeProperty(_properties.smoothness, "Smoothness Scale");
-                    materialEditor.RangeProperty(_properties.metallic, "Metallic Scale");
+                    if (_renderMode != RenderMode.UNITY_SIMPLE_LIT)
+                    {
+                        materialEditor.RangeProperty(_properties.smoothness, "Smoothness Scale");
+                        materialEditor.RangeProperty(_properties.metallic, "Metallic Scale");
+                    }
+
                     materialEditor.RangeProperty(_properties.occlusion, "Ambient Occlusion Scale");
                 }
                 else
                 {
-                    materialEditor.RangeProperty(_properties.smoothness, _properties.smoothness.displayName);
-                    materialEditor.RangeProperty(_properties.metallic, _properties.metallic.displayName);
+                    if (_renderMode != RenderMode.UNITY_SIMPLE_LIT)
+                    {
+                        materialEditor.RangeProperty(_properties.smoothness, _properties.smoothness.displayName);
+                        materialEditor.RangeProperty(_properties.metallic, _properties.metallic.displayName);
+                    }
+
                     materialEditor.RangeProperty(_properties.occlusion, _properties.occlusion.displayName);
                 }
 
-                EditorGUI.BeginChangeCheck();
-                _enableNormalMap = EditorGUILayout.Toggle("Enable Normal Map", _enableNormalMap);
-
-                if (EditorGUI.EndChangeCheck())
+                if (_renderMode != RenderMode.UNITY_SIMPLE_LIT)
                 {
-                    Undo.RecordObject(_target, "Updated normal map enabled");
+                    EditorGUI.BeginChangeCheck();
+                    _enableNormalMap = EditorGUILayout.Toggle("Enable Normal Map", _enableNormalMap);
 
-                    if (_enableNormalMap) { _target.EnableKeyword("_NORMALMAP"); }
-                    else { _target.DisableKeyword("_NORMALMAP"); }
-                }
-
-                if (_enableNormalMap)
-                {
-                    if (_enableTex2DArray)
+                    if (EditorGUI.EndChangeCheck())
                     {
-                        materialEditor.TexturePropertySingleLine(new GUIContent("Normal Map"), _properties.normalMapArray, _properties.normalStrength);
-                        materialEditor.IntegerProperty(_properties.normalMapIndex, _properties.normalMapIndex.displayName);
+                        Undo.RecordObject(_target, "Updated normal map enabled");
+
+                        if (_enableNormalMap) { _target.EnableKeyword("_NORMALMAP"); }
+                        else { _target.DisableKeyword("_NORMALMAP"); }
                     }
-                    else
+
+                    if (_enableNormalMap)
                     {
-                        materialEditor.TexturePropertySingleLine(new GUIContent("Normal Map"), _properties.normalMap, _properties.normalStrength);
+                        if (_enableTex2DArray)
+                        {
+                            materialEditor.TexturePropertySingleLine(new GUIContent("Normal Map"), _properties.normalMapArray, _properties.normalStrength);
+                            materialEditor.IntegerProperty(_properties.normalMapIndex, _properties.normalMapIndex.displayName);
+                        }
+                        else
+                        {
+                            materialEditor.TexturePropertySingleLine(new GUIContent("Normal Map"), _properties.normalMap, _properties.normalStrength);
+                        }
                     }
-                }
-                else
-                {
-                    _properties.normalMap.textureValue = null;
                 }
             }
 
@@ -432,8 +439,8 @@ public class CustomAvatarShaderGUI : ShaderGUI
                 else { _target.DisableKeyword("_DEBUG_MIPMAP"); }
             }
 
-            if (_enableDebugMipmap) 
-            { 
+            if (_enableDebugMipmap)
+            {
                 if (_enableTex2DArray)
                 {
                     materialEditor.TexturePropertySingleLine(new GUIContent(_properties.debugMipmapTexArray.displayName), _properties.debugMipmapTexArray);
@@ -441,7 +448,7 @@ public class CustomAvatarShaderGUI : ShaderGUI
                 }
                 else
                 {
-                    materialEditor.TexturePropertySingleLine(new GUIContent(_properties.debugMipmapTex.displayName), _properties.debugMipmapTex); 
+                    materialEditor.TexturePropertySingleLine(new GUIContent(_properties.debugMipmapTex.displayName), _properties.debugMipmapTex);
                     materialEditor.TextureScaleOffsetProperty(_properties.debugMipmapTex);
                 }
             }
@@ -449,19 +456,19 @@ public class CustomAvatarShaderGUI : ShaderGUI
             materialEditor.RenderQueueField();
         }
 
-        if (!_enableMARMap) 
-        { 
+        if (!_enableMARMap)
+        {
             if (_enableTex2DArray) { _properties.marMapArray.textureValue = null; }
             else { _properties.marMap.textureValue = null; }
         }
 
-        if (!_enableNormalMap) 
+        if (!_enableNormalMap)
         {
             if (_enableTex2DArray) { _properties.normalMapArray.textureValue = null; }
             else { _properties.normalMap.textureValue = null; }
         }
 
-        if (!_enableDebugMipmap) 
+        if (!_enableDebugMipmap)
         {
             if (_enableTex2DArray) { _properties.debugMipmapTexArray.textureValue = null; }
             else { _properties.debugMipmapTex.textureValue = null; }
@@ -524,20 +531,15 @@ public class CustomAvatarShaderGUI : ShaderGUI
                 _target.DisableKeyword("_REFLECTION");
                 _target.DisableKeyword("_DIFFUSE_COLOR");
                 _target.DisableKeyword("_RIM_LIGHT");
-                _enableNormalMap = false;
-                _enableMARMap = false;
                 break;
             case RenderMode.UNITY_SIMPLE_LIT:
                 _target.DisableKeyword(UNLIT_KEYWORD);
                 _target.EnableKeyword(SIMPLE_LIT_KEYWORD);
                 _target.DisableKeyword(CUSTOM_LIT_KEYWORD);
                 _target.DisableKeyword("_NORMALMAP");
-                _target.DisableKeyword("_MARMAP");
                 _target.DisableKeyword("_REFLECTION");
                 _target.DisableKeyword("_DIFFUSE_COLOR");
                 _target.DisableKeyword("_RIM_LIGHT");
-                _enableNormalMap = false;
-                _enableMARMap = false;
                 break;
             case RenderMode.CUSTOM_LIT:
                 _target.DisableKeyword(UNLIT_KEYWORD);

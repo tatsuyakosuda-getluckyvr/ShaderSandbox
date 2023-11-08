@@ -1,4 +1,4 @@
-﻿Shader "LuckyVR/(deprecated)RPM Avatar"
+﻿Shader "Custom/(deprecated)RPM Avatar"
 {
     Properties
     { 
