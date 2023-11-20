@@ -23,7 +23,8 @@ struct Varyings
     half4 tangentWS  : TEXCOORD3;
 #endif
     DECLARE_LIGHTMAP_OR_SH(lightmapUV, vertexSH, 4);
-    half3 vertexLight : TEXVCOORD5;
+    half3 vertexLight : TEXCOORD5;
+    half3 positionOS : TEXCOORD6;
 #ifdef UNITY_ANY_INSTANCING_ENABLED
     uint instanceID : CUSTOM_INSTANCE_ID;
 #endif
@@ -35,15 +36,20 @@ struct Varyings
 #endif
 };
 
-Varyings AvatarPassVertex(Attributes input)
+Varyings AvatarPassVertex(Attributes input, uint vId : SV_VertexID)
 {
-    Varyings o;
+    Varyings o = (Varyings) 0;
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_TRANSFER_INSTANCE_ID(input, o);
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-
-    o.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+#if _CUSTOM_GPU_SKINNING
+    input.positionOS.xyz = GetVertexPosition(input.positionOS.xyz, vId);
+    input.normalOS = GetNormal(input.normalOS, vId);
+    input.tangentOS.xyz = GetTangent(input.tangentOS.xyz, vId);
+#endif
+    o.positionOS = input.positionOS.xyz;
     o.positionWS = TransformObjectToWorld(input.positionOS.xyz);
+    o.positionCS = TransformWorldToHClip(o.positionWS);
     o.normalWS = TransformObjectToWorldNormal(input.normalOS);
 #ifdef _TEX_ARRAY
     o.uv = TRANSFORM_TEX(input.uv, _BaseMapArray);

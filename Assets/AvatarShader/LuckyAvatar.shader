@@ -20,13 +20,23 @@
         _DiffuseColor ("Diffuse Color", Color) = (1, 1, 1, 1)
         _DiffuseColor2 ("Diffuse Color2", Color) = (1, 1, 1, 1)
         _LightDirection ("Light Direction", Vector) = (0, 0, 0, 0)
+        _LightDirection2 ("Light Direction2", Vector) = (0, 0, 0, 0)
         _RimColor ("Rim Light Color", Color) = (1, 1, 1, 1)
         _RimColor2 ("Rim Light Color2", Color) = (1, 1, 1, 1)
+        _RimPower ("Rim Light Hardness", Range(0.0, 5.0)) = 4.0
+        _RimPower2 ("Rim Light Hardness2", Range(0.0, 5.0)) = 4.0
         _GradientScale ("Gradient Scale", Vector) = (0, 0, 1, 1)
         _GradientAngle ("Gradient Angle", Range(-180, 180)) = 0
-        _RimPower ("Rim Light Power", Range(0.0, 5.0)) = 4.0
+        _GradientPower ("Gradient Hardness", Range(1, 100)) = 1
+        _GradientOffset ("Gradient Offset", Range(-1, 1)) = 0
+        _DiffuseIntensity ("MainLight Intensity", Range(0, 10)) = 1
+        _DiffuseIntensity2 ("MainLight Intensity2", Range(0, 10)) = 1
+        _RimIntensity ("RimLight Intensity", Range(0, 10)) = 1
+        _RimIntensity2 ("RimLight Intensity2", Range(0, 10)) = 1
+        _UVTilingX ("UV Tiling X", Integer) = 4
 
         [HideInInspector] _EulerLightDirection("Light Dirrection (Euler)", Vector) = (90, 0, 0, 0)
+        [HideInInspector] _EulerLightDirection2("Light Dirrection (Euler)2", Vector) = (90, 0, 0, 0)
         [HideInInspector] _DebugMipmapTex ("Debug mipmap texture", 2D) = "white" {}
         [HideInInspector] _DebugMipmapTexArray ("Debug mipmap texture array", 2DArray) = "white" {}
         [HideInInspector] _SrcBlend ("SrcBlend", Float) = 1
@@ -65,8 +75,12 @@
             #pragma shader_feature_local_fragment _ _DEBUG_MIPMAP
             #pragma shader_feature_local_fragment _ _GRADIENT_LIGHT
             #pragma shader_feature_local_fragment _ _RADIAL_GRADIENT_LIGHT
+            #pragma shader_feature_local_fragment _ _EXP_GRADIENT_MODE
+            #pragma shader_feature_local_fragment _ _UVTILING
+            #pragma shader_feature_local_fragment _ _OBJECT_SPACE_GRADIENT
             #pragma shader_feature_local _ _TEX_ARRAY
             #pragma shader_feature_local _ _NORMALMAP
+            #pragma multi_compile _ _CUSTOM_GPU_SKINNING
 
             #include "HLSL/AvatarInput.hlsl"
             #include "HLSL/AvatarForwardPass.hlsl"
@@ -104,8 +118,12 @@
             #pragma shader_feature_local_fragment _ _DEBUG_MIPMAP
             #pragma shader_feature_local_fragment _ _GRADIENT_LIGHT
             #pragma shader_feature_local_fragment _ _RADIAL_GRADIENT_LIGHT
+            #pragma shader_feature_local_fragment _ _EXP_GRADIENT_MODE
+            #pragma shader_feature_local_fragment _ _UVTILING
+            #pragma shader_feature_local_fragment _ _OBJECT_SPACE_GRADIENT
             #pragma shader_feature_local _ _TEX_ARRAY
             #pragma shader_feature_local _ _NORMALMAP
+            #pragma multi_compile _ _CUSTOM_GPU_SKINNING
 
             #undef _NORMALMAP
 
@@ -145,8 +163,12 @@
             #pragma shader_feature_local_fragment _ _DEBUG_MIPMAP
             #pragma shader_feature_local_fragment _ _GRADIENT_LIGHT
             #pragma shader_feature_local_fragment _ _RADIAL_GRADIENT_LIGHT
+            #pragma shader_feature_local_fragment _ _EXP_GRADIENT_MODE
+            #pragma shader_feature_local_fragment _ _UVTILING
+            #pragma shader_feature_local_fragment _ _OBJECT_SPACE_GRADIENT
             #pragma shader_feature_local _ _TEX_ARRAY
             #pragma shader_feature_local _ _NORMALMAP
+            #pragma multi_compile _ _CUSTOM_GPU_SKINNING
 
             #undef _NORMALMAP
             #undef _MARMAP
@@ -159,5 +181,5 @@
             ENDHLSL
         }
     }
-    CustomEditor "CustomAvatarShaderGUI"
+    CustomEditor "LuckyAvatarShaderGUI"
 }

@@ -9,7 +9,8 @@ ShaderImporter:
   - _MARMapArray: {instanceID: 0}
   - _NormalMap: {instanceID: 0}
   - _NormalMapArray: {instanceID: 0}
-  - _MipMap: {instanceID: 0}
+  - _DebugMipmapTex: {instanceID: 0}
+  - _DebugMipmapTexArray: {instanceID: 0}
   nonModifiableTextures: []
   userData: 
   assetBundleName: 

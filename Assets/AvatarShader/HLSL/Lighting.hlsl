@@ -8,11 +8,19 @@ struct CustomLight
     half3 diffuseColor;
     half3 diffuseColor2;
     half3 lightDirection;
+    half3 lightDirection2;
     half3 rimLightColor;
     half3 rimLightColor2;
     half4 gradientScale;
     half gradientAngle;
     half rimLightPower;
+    half rimLightPower2;
+    half gradientPower;
+    half gradientOffset;
+    half diffuseIntensity;
+    half diffuseIntensity2;
+    half rimIntensity;
+    half rimIntensity2;
 };
 
 // https://www.jordanstevenstechart.com/lighting-models
@@ -92,28 +100,49 @@ half4 UniversalFragmentCustomLighting(InputData inputData, SurfaceData surfaceDa
 #endif
 
 #ifdef _GRADIENT_LIGHT
-    half2 gradient = saturate((inputData.positionWS.xz - light.gradientScale.xy) / (light.gradientScale.zw - light.gradientScale.xy));
+#if _OBJECT_SPACE_GRADIENT
+    half3 positionOS = TransformWorldToObject(inputData.positionWS);
+    half2 gradient = (-positionOS.xy - light.gradientScale.xy) / (light.gradientScale.zw - light.gradientScale.xy);
+#else
+    half2 gradient = (inputData.positionWS.xz - light.gradientScale.xy) / (light.gradientScale.zw - light.gradientScale.xy);
+#endif
     half angleCos = cos(radians(light.gradientAngle));
     half angleSin = sin(radians(light.gradientAngle));
     half2x2 rotateMatrix = half2x2(angleCos, -angleSin, angleSin, angleCos);
     gradient = mul(gradient - 0.5, rotateMatrix) + 0.5;
 #if _RADIAL_GRADIENT_LIGHT
-    half3 diffuseColor = lerp(light.diffuseColor.rgb, light.diffuseColor2.rgb, length((gradient - 0.5) * 2));
-    half3 rimColor = lerp(light.rimLightColor.rgb, light.rimLightColor2.rgb, length((gradient - 0.5) * 2));
+#if _EXP_GRADIENT_MODE
+    half weight = pow(saturate(length((gradient - 0.5) * 2) + light.gradientOffset), light.gradientPower);
 #else
-    half3 diffuseColor = lerp(light.diffuseColor.rgb, light.diffuseColor2.rgb, length(gradient));
-    half3 rimColor = lerp(light.rimLightColor.rgb, light.rimLightColor2.rgb, length(gradient));
+    half weight = saturate(length((gradient - 0.5) * 2) + light.gradientOffset);
 #endif
+#else
+#if _EXP_GRADIENT_MODE
+    half weight = pow(saturate(gradient.x + light.gradientOffset), light.gradientPower);
+#else
+    half weight = saturate(gradient.x + light.gradientOffset);
+#endif
+#endif
+    half3 diffuseColor = lerp(light.diffuseColor.rgb, light.diffuseColor2.rgb, weight);
+    half3 lightDirection = lerp(light.lightDirection.xyz, light.lightDirection2.xyz, weight);
+    half3 rimColor = lerp(light.rimLightColor.rgb, light.rimLightColor2.rgb, weight);
+    half lightIntensity = lerp(light.diffuseIntensity, light.diffuseIntensity2, weight);
+    half rimIntensity = lerp(light.rimIntensity, light.rimIntensity2, weight);
+    half rimPower = lerp(light.rimLightPower, light.rimLightPower2, weight);
 #else
     half3 diffuseColor = light.diffuseColor.rgb;
+    half3 lightDirection = light.lightDirection.xyz;
     half3 rimColor = light.rimLightColor.rgb;
+    half lightIntensity = light.diffuseIntensity;
+    half rimIntensity = light.rimIntensity;
+    half rimPower = light.rimLightPower;
 #endif
     half3 ambientColor = inputData.bakedGI;
-    ambientColor += CalculateDiffusion(diffuseColor, light.lightDirection.xyz, inputData.normalWS, inputData.viewDirectionWS, 1 - surfaceData.smoothness);
+    ambientColor += CalculateDiffusion(diffuseColor, lightDirection, inputData.normalWS, inputData.viewDirectionWS, 1 - surfaceData.smoothness) * lightIntensity;
     half oneMinusReflectivity = OneMinusReflectivityMetallic(surfaceData.metallic);
     half3 col = surfaceData.albedo * oneMinusReflectivity * ambientColor;
     half nv = CalculateNdotV(inputData.normalWS, inputData.viewDirectionWS);
-    col += CalculateRimLighting(nv, rimColor, light.rimLightPower);
+    col += CalculateRimLighting(nv, rimColor, rimPower) * rimIntensity;
     col += CalculateReflectionProbe(inputData, surfaceData, nv, 1 - oneMinusReflectivity);
     return half4(col * surfaceData.occlusion, surfaceData.alpha);
 }

@@ -6,7 +6,7 @@ using UnityEngine.Rendering;
 using System.Linq;
 using UnityEditor.Rendering;
 
-public class CustomAvatarShaderGUI : ShaderGUI
+public class LuckyAvatarShaderGUI : ShaderGUI
 {
 
     public enum RenderMode
@@ -22,6 +22,16 @@ public class CustomAvatarShaderGUI : ShaderGUI
     public enum LightingModel
     {
         LAMBERT, HALF_LAMBERT, MINNAERT
+    }
+
+    public enum GradientStyle
+    {
+        LINEAR, RADIAL
+    }
+
+    public enum GradientMode
+    {
+        LINEAR, EXPONENTIAL
     }
 
     private class Properties
@@ -44,14 +54,24 @@ public class CustomAvatarShaderGUI : ShaderGUI
         public MaterialProperty diffuseColor;
         public MaterialProperty diffuseColor2;
         public MaterialProperty eulerLightDirection;
+        public MaterialProperty eulerLightDirection2;
         public MaterialProperty lightDirection;
+        public MaterialProperty lightDirection2;
         public MaterialProperty rimColor;
         public MaterialProperty rimColor2;
         public MaterialProperty rimPower;
+        public MaterialProperty rimPower2;
         public MaterialProperty gradientScale;
         public MaterialProperty debugMipmapTex;
         public MaterialProperty debugMipmapTexArray;
         public MaterialProperty gradientAngle;
+        public MaterialProperty gradientPower;
+        public MaterialProperty gradientOffset;
+        public MaterialProperty diffuseIntensity;
+        public MaterialProperty diffuseIntensity2;
+        public MaterialProperty rimIntensity;
+        public MaterialProperty rimIntensity2;
+        public MaterialProperty uvTilingX;
     }
 
     private RenderMode _renderMode;
@@ -59,6 +79,8 @@ public class CustomAvatarShaderGUI : ShaderGUI
     private LightingModel _lightingModel;
     private Material _target;
     private Properties _properties;
+    private GradientStyle _gradientStyle;
+    private GradientMode _gradientMode;
     private bool _enableMARMap;
     private bool _enableNormalMap;
     private bool _enableDiffuseColor;
@@ -66,8 +88,9 @@ public class CustomAvatarShaderGUI : ShaderGUI
     private bool _enableRimLight;
     private bool _enableTex2DArray;
     private bool _enableDebugMipmap;
-    private bool _enableRadialGradient;
     private bool _enableGradient;
+    private bool _enableUVTiling;
+    private bool _enableObjectSpaceGradient;
 
     private static readonly string UNLIT_KEYWORD = "_UNLIT";
     private static readonly string SIMPLE_LIT_KEYWORD = "_SIMPLELIT";
@@ -81,6 +104,12 @@ public class CustomAvatarShaderGUI : ShaderGUI
     private bool _beforeIsOpenLightSettings;
     private bool _isOpenAdvancedSettings;
     private bool _beforeIsOpenAdvancedSettings;
+
+    private GUIStyle _centerLabel;
+    private GUIContent _baseMapGUI;
+    private GUIContent _marMapGUI;
+    private GUIContent _normalMapGUI;
+    private GUIContent _debugMipmapGUI;
 
     private enum Expandable
     {
@@ -146,6 +175,24 @@ public class CustomAvatarShaderGUI : ShaderGUI
             _lightingModel = LightingModel.LAMBERT;
         }
 
+        if (_target.IsKeywordEnabled("_RADIAL_GRADIENT_LIGHT"))
+        {
+            _gradientStyle = GradientStyle.RADIAL;
+        }
+        else
+        {
+            _gradientStyle = GradientStyle.LINEAR;
+        }
+
+        if (_target.IsKeywordEnabled("_EXP_GRADIENT_MODE"))
+        {
+            _gradientMode = GradientMode.EXPONENTIAL;
+        }
+        else
+        {
+            _gradientMode = GradientMode.LINEAR;
+        }
+
         _isOpenSurfaceOptions = IsExpanded((uint)Expandable.SurfaceOptions);
         _beforeIsOpenSurfaceOptions = _isOpenSurfaceOptions;
         _isOpenSurfaceInputs = IsExpanded((uint)Expandable.SurfaceInputs);
@@ -154,6 +201,12 @@ public class CustomAvatarShaderGUI : ShaderGUI
         _beforeIsOpenLightSettings = _isOpenLightSettings;
         _isOpenAdvancedSettings = IsExpanded((uint)Expandable.Advanced);
         _beforeIsOpenAdvancedSettings = _isOpenAdvancedSettings;
+
+        _centerLabel = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 13 };
+        _baseMapGUI = new GUIContent("BaseMap");
+        _marMapGUI = new GUIContent("MARMap", "Metallic(R) AO(G) Roughness(B)");
+        _normalMapGUI = new GUIContent("NormalMap");
+        _debugMipmapGUI = new GUIContent("DebugMipmapTexture");
     }
 
     public override void OnGUI(MaterialEditor materialEditor, MaterialProperty[] properties)
@@ -181,14 +234,24 @@ public class CustomAvatarShaderGUI : ShaderGUI
             _properties.diffuseColor = properties.FirstOrDefault(x => x.name == "_DiffuseColor");
             _properties.diffuseColor2 = properties.FirstOrDefault(x => x.name == "_DiffuseColor2");
             _properties.eulerLightDirection = properties.FirstOrDefault(x => x.name == "_EulerLightDirection");
+            _properties.eulerLightDirection2 = properties.FirstOrDefault(x => x.name == "_EulerLightDirection2");
             _properties.lightDirection = properties.FirstOrDefault(x => x.name == "_LightDirection");
+            _properties.lightDirection2 = properties.FirstOrDefault(x => x.name == "_LightDirection2");
             _properties.rimColor = properties.FirstOrDefault(x => x.name == "_RimColor");
             _properties.rimColor2 = properties.FirstOrDefault(x => x.name == "_RimColor2");
             _properties.gradientScale = properties.FirstOrDefault(x => x.name == "_GradientScale");
             _properties.rimPower = properties.FirstOrDefault(x => x.name == "_RimPower");
+            _properties.rimPower2 = properties.FirstOrDefault(x => x.name == "_RimPower2");
             _properties.debugMipmapTex = properties.FirstOrDefault(x => x.name == "_DebugMipmapTex");
             _properties.debugMipmapTexArray = properties.FirstOrDefault(x => x.name == "_DebugMipmapTexArray");
             _properties.gradientAngle = properties.FirstOrDefault(x => x.name == "_GradientAngle");
+            _properties.gradientPower = properties.FirstOrDefault(x => x.name == "_GradientPower");
+            _properties.gradientOffset = properties.FirstOrDefault(x => x.name == "_GradientOffset");
+            _properties.diffuseIntensity = properties.FirstOrDefault(x => x.name == "_DiffuseIntensity");
+            _properties.diffuseIntensity2 = properties.FirstOrDefault(x => x.name == "_DiffuseIntensity2");
+            _properties.rimIntensity = properties.FirstOrDefault(x => x.name == "_RimIntensity");
+            _properties.rimIntensity2 = properties.FirstOrDefault(x => x.name == "_RimIntensity2");
+            _properties.uvTilingX = properties.FirstOrDefault(x => x.name == "_UVTilingX");
         }
 
         Initialize();
@@ -200,8 +263,9 @@ public class CustomAvatarShaderGUI : ShaderGUI
         _enableRimLight = _target.IsKeywordEnabled("_RIM_LIGHT");
         _enableTex2DArray = _target.IsKeywordEnabled("_TEX_ARRAY");
         _enableDebugMipmap = _target.IsKeywordEnabled("_DEBUG_MIPMAP");
-        _enableRadialGradient = _target.IsKeywordEnabled("_RADIAL_GRADIENT_LIGHT");
         _enableGradient = _target.IsKeywordEnabled("_GRADIENT_LIGHT");
+        _enableUVTiling = _target.IsKeywordEnabled("_UVTILING");
+        _enableObjectSpaceGradient = _target.IsKeywordEnabled("_OBJECT_SPACE_GRADIENT");
 
         _isOpenSurfaceOptions = CoreEditorUtils.DrawHeaderFoldout("Surface Options", _isOpenSurfaceOptions);
 
@@ -247,18 +311,21 @@ public class CustomAvatarShaderGUI : ShaderGUI
 
         if (_isOpenSurfaceInputs)
         {
+            EditorGUILayout.LabelField("BaseColor Settings", _centerLabel);
             if (_enableTex2DArray)
             {
-                materialEditor.TexturePropertySingleLine(new GUIContent("Base Map"), _properties.baseMapArray, _properties.baseColor);
+                materialEditor.TexturePropertySingleLine(_baseMapGUI, _properties.baseMapArray, _properties.baseColor);
                 materialEditor.IntegerProperty(_properties.baseMapIndex, _properties.baseMapIndex.displayName);
             }
             else
             {
-                materialEditor.TexturePropertySingleLine(new GUIContent("Base Map"), _properties.baseMap, _properties.baseColor);
+                materialEditor.TexturePropertySingleLine(_baseMapGUI, _properties.baseMap, _properties.baseColor);
             }
 
             if (_renderMode != RenderMode.UNITY_UNLIT)
             {
+                EditorGUILayout.Space(10);
+                EditorGUILayout.LabelField("MAR Settings", _centerLabel);
                 EditorGUI.BeginChangeCheck();
                 _enableMARMap = EditorGUILayout.Toggle("Enable MAR Map", _enableMARMap);
 
@@ -274,12 +341,12 @@ public class CustomAvatarShaderGUI : ShaderGUI
                 {
                     if (_enableTex2DArray)
                     {
-                        materialEditor.TexturePropertySingleLine(new GUIContent("MAR Map", "Metallic(R) AO(G) Roughness(B)"), _properties.marMapArray, null);
+                        materialEditor.TexturePropertySingleLine(_marMapGUI, _properties.marMapArray, null);
                         materialEditor.IntegerProperty(_properties.marMapIndex, _properties.marMapIndex.displayName);
                     }
                     else
                     {
-                        materialEditor.TexturePropertySingleLine(new GUIContent("MAR Map", "Metallic(R) AO(G) Roughness(B)"), _properties.marMap, null);
+                        materialEditor.TexturePropertySingleLine(_marMapGUI, _properties.marMap, null);
                     }
 
                     if (_renderMode != RenderMode.UNITY_SIMPLE_LIT)
@@ -303,6 +370,8 @@ public class CustomAvatarShaderGUI : ShaderGUI
 
                 if (_renderMode != RenderMode.UNITY_SIMPLE_LIT)
                 {
+                    EditorGUILayout.Space(10);
+                    EditorGUILayout.LabelField("Normal Settings", _centerLabel);
                     EditorGUI.BeginChangeCheck();
                     _enableNormalMap = EditorGUILayout.Toggle("Enable Normal Map", _enableNormalMap);
 
@@ -318,17 +387,19 @@ public class CustomAvatarShaderGUI : ShaderGUI
                     {
                         if (_enableTex2DArray)
                         {
-                            materialEditor.TexturePropertySingleLine(new GUIContent("Normal Map"), _properties.normalMapArray, _properties.normalStrength);
+                            materialEditor.TexturePropertySingleLine(_normalMapGUI, _properties.normalMapArray, _properties.normalStrength);
                             materialEditor.IntegerProperty(_properties.normalMapIndex, _properties.normalMapIndex.displayName);
                         }
                         else
                         {
-                            materialEditor.TexturePropertySingleLine(new GUIContent("Normal Map"), _properties.normalMap, _properties.normalStrength);
+                            materialEditor.TexturePropertySingleLine(_normalMapGUI, _properties.normalMap, _properties.normalStrength);
                         }
                     }
                 }
             }
 
+            EditorGUILayout.Space(10);
+            EditorGUILayout.LabelField("Common Settings", _centerLabel);
             if (_enableTex2DArray) { materialEditor.TextureScaleOffsetProperty(_properties.baseMapArray); }
             else { materialEditor.TextureScaleOffsetProperty(_properties.baseMap); }
         }
@@ -345,6 +416,7 @@ public class CustomAvatarShaderGUI : ShaderGUI
 
             if (_isOpenLightSettings)
             {
+                EditorGUILayout.LabelField("Gradient Settings", _centerLabel);
                 EditorGUI.BeginChangeCheck();
                 _enableGradient = EditorGUILayout.Toggle("Enable Gradient", _enableGradient);
 
@@ -359,24 +431,74 @@ public class CustomAvatarShaderGUI : ShaderGUI
                 if (_enableGradient)
                 {
                     EditorGUI.BeginChangeCheck();
-                    _enableRadialGradient = EditorGUILayout.Toggle("Enable Radial Gradient", _enableRadialGradient);
+                    _enableObjectSpaceGradient = EditorGUILayout.Toggle("ObjectSpace", _enableObjectSpaceGradient);
 
                     if (EditorGUI.EndChangeCheck())
                     {
-                        Undo.RecordObject(_target, "Updated radial gradient enabled");
+                        Undo.RecordObject(_target, "Updated object space enabled");
 
-                        if (_enableRadialGradient) { _target.EnableKeyword("_RADIAL_GRADIENT_LIGHT"); }
-                        else { _target.DisableKeyword("_RADIAL_GRADIENT_LIGHT"); }
+                        if (_enableObjectSpaceGradient) { _target.EnableKeyword("_OBJECT_SPACE_GRADIENT"); }
+                        else { _target.DisableKeyword("_OBJECT_SPACE_GRADIENT"); }
+                    }
+                    {
+                        var xy = new Vector2(_properties.gradientScale.vectorValue.x, _properties.gradientScale.vectorValue.y);
+                        var zw = new Vector2(_properties.gradientScale.vectorValue.z, _properties.gradientScale.vectorValue.w);
+                        xy = EditorGUILayout.Vector2Field("gradient scale (min coord)", xy);
+                        zw = EditorGUILayout.Vector2Field("gradient scale (max coord)", zw);
+                        _properties.gradientScale.vectorValue = new Vector4(xy.x, xy.y, zw.x, zw.y);
+                    }
+                    materialEditor.RangeProperty(_properties.gradientOffset, _properties.gradientOffset.displayName);
+
+                    EditorGUI.BeginChangeCheck();
+                    _gradientStyle = (GradientStyle)EditorGUILayout.EnumPopup("Gradient Style", _gradientStyle);
+
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        Undo.RecordObject(_target, "Updated gradient style");
+
+                        switch (_gradientStyle)
+                        {
+                            case GradientStyle.RADIAL:
+                                _target.EnableKeyword("_RADIAL_GRADIENT_LIGHT");
+                                break;
+                            default:
+                                _target.DisableKeyword("_RADIAL_GRADIENT_LIGHT");
+                                break;
+                        }
                     }
 
-                    materialEditor.VectorProperty(_properties.gradientScale, _properties.gradientScale.displayName);
-
-                    if (!_enableRadialGradient)
+                    if (_gradientStyle != GradientStyle.RADIAL)
                     {
                         materialEditor.RangeProperty(_properties.gradientAngle, _properties.gradientAngle.displayName);
                     }
+
+                    EditorGUI.BeginChangeCheck();
+                    _gradientMode = (GradientMode)EditorGUILayout.EnumPopup("Gradient Mode", _gradientMode);
+
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        Undo.RecordObject(_target, "Updated gradient mode");
+
+                        switch (_gradientMode)
+                        {
+                            case GradientMode.EXPONENTIAL:
+                                _target.EnableKeyword("_EXP_GRADIENT_MODE");
+                                break;
+                            default:
+                                _target.DisableKeyword("_EXP_GRADIENT_MODE");
+                                break;
+                        }
+                    }
+
+                    if (_gradientMode == GradientMode.EXPONENTIAL)
+                    {
+                        materialEditor.RangeProperty(_properties.gradientPower, _properties.gradientPower.displayName);
+                    }
+
                 }
 
+                EditorGUILayout.Space(10);
+                EditorGUILayout.LabelField("MainLight Settings", _centerLabel);
                 EditorGUI.BeginChangeCheck();
                 _enableDiffuseColor = EditorGUILayout.Toggle("Enable Diffuse Color", _enableDiffuseColor);
 
@@ -415,32 +537,46 @@ public class CustomAvatarShaderGUI : ShaderGUI
 
                     if (_enableGradient)
                     {
+                        EditorGUILayout.LabelField("MainLight #1");
+                        EditorGUI.indentLevel++;
                         materialEditor.ColorProperty(_properties.diffuseColor, _properties.diffuseColor.displayName);
+                        {
+                            _properties.eulerLightDirection.vectorValue = EditorGUILayout.Vector2Field("Light Direction", _properties.eulerLightDirection.vectorValue);
+                            var dir = _properties.eulerLightDirection.vectorValue;
+                            var matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.Euler(dir.x, dir.y, dir.z), Vector3.one);
+                            var lightpos = -matrix.GetColumn(2);
+                            _properties.lightDirection.vectorValue = new Vector4(lightpos.x, lightpos.y, lightpos.z, 0);
+                        }
+                        materialEditor.RangeProperty(_properties.diffuseIntensity, _properties.diffuseIntensity.displayName);
+                        EditorGUI.indentLevel--;
+                        EditorGUILayout.LabelField("MainLight #2");
+                        EditorGUI.indentLevel++;
                         materialEditor.ColorProperty(_properties.diffuseColor2, _properties.diffuseColor2.displayName);
+                        {
+                            _properties.eulerLightDirection2.vectorValue = EditorGUILayout.Vector2Field("Light Direction2", _properties.eulerLightDirection2.vectorValue);
+                            var dir = _properties.eulerLightDirection2.vectorValue;
+                            var matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.Euler(dir.x, dir.y, dir.z), Vector3.one);
+                            var lightpos = -matrix.GetColumn(2);
+                            _properties.lightDirection2.vectorValue = new Vector4(lightpos.x, lightpos.y, lightpos.z, 0);
+                        }
+                        materialEditor.RangeProperty(_properties.diffuseIntensity2, _properties.diffuseIntensity2.displayName);
+                        EditorGUI.indentLevel--;
                     }
                     else
                     {
                         materialEditor.ColorProperty(_properties.diffuseColor, _properties.diffuseColor.displayName);
+                        _properties.diffuseColor2.colorValue = _properties.diffuseColor.colorValue;
+                        _properties.eulerLightDirection.vectorValue = EditorGUILayout.Vector2Field("Light Direction", _properties.eulerLightDirection.vectorValue);
+                        var dir = _properties.eulerLightDirection.vectorValue;
+                        var matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.Euler(dir.x, dir.y, dir.z), Vector3.one);
+                        var lightpos = -matrix.GetColumn(2);
+                        _properties.lightDirection.vectorValue = new Vector4(lightpos.x, lightpos.y, lightpos.z, 0);
+                        materialEditor.RangeProperty(_properties.diffuseIntensity, _properties.diffuseIntensity.displayName);
                     }
-
-                    _properties.eulerLightDirection.vectorValue = EditorGUILayout.Vector2Field("Light Direction", _properties.eulerLightDirection.vectorValue);
-                    var dir = _properties.eulerLightDirection.vectorValue;
-                    var matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.Euler(dir.x, dir.y, dir.z), Vector3.one);
-                    var lightpos = -matrix.GetColumn(2);
-                    _properties.lightDirection.vectorValue = new Vector4(lightpos.x, lightpos.y, lightpos.z, 0);
                 }
 
-                EditorGUI.BeginChangeCheck();
-                _enableReflection = EditorGUILayout.Toggle("Enable Reflection", _enableReflection);
-
-                if (EditorGUI.EndChangeCheck())
-                {
-                    Undo.RecordObject(_target, "Updated reflection enabled");
-
-                    if (_enableReflection) { _target.EnableKeyword("_REFLECTION"); }
-                    else { _target.DisableKeyword("_REFLECTION"); }
-                }
-
+                EditorGUILayout.Space(10);
+                EditorGUILayout.LabelField("RimLight Settings", _centerLabel);
                 EditorGUI.BeginChangeCheck();
                 _enableRimLight = EditorGUILayout.Toggle("Enable Rim Light", _enableRimLight);
 
@@ -456,16 +592,38 @@ public class CustomAvatarShaderGUI : ShaderGUI
                 {
                     if (_enableGradient)
                     {
+                        EditorGUILayout.LabelField("RimLight #1");
+                        EditorGUI.indentLevel++;
                         materialEditor.ColorProperty(_properties.rimColor, _properties.rimColor.displayName);
+                        materialEditor.RangeProperty(_properties.rimPower, _properties.rimPower.displayName);
+                        materialEditor.RangeProperty(_properties.rimIntensity, _properties.rimIntensity.displayName);
+                        EditorGUI.indentLevel--;
+                        EditorGUILayout.LabelField("RimLight #2");
+                        EditorGUI.indentLevel++;
                         materialEditor.ColorProperty(_properties.rimColor2, _properties.rimColor2.displayName);
+                        materialEditor.RangeProperty(_properties.rimPower2, _properties.rimPower2.displayName);
+                        materialEditor.RangeProperty(_properties.rimIntensity2, _properties.rimIntensity2.displayName);
+                        EditorGUI.indentLevel--;
                     }
                     else
                     {
                         materialEditor.ColorProperty(_properties.rimColor, _properties.rimColor.displayName);
                         _properties.rimColor2.colorValue = _properties.rimColor.colorValue;
+                        materialEditor.RangeProperty(_properties.rimPower, _properties.rimPower.displayName);
+                        materialEditor.RangeProperty(_properties.rimIntensity, _properties.rimIntensity.displayName);
                     }
+                }
 
-                    materialEditor.RangeProperty(_properties.rimPower, _properties.rimPower.displayName);
+                EditorGUILayout.Space(10);
+                EditorGUI.BeginChangeCheck();
+                _enableReflection = EditorGUILayout.Toggle("ReflectionProbe", _enableReflection);
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated reflection enabled");
+
+                    if (_enableReflection) { _target.EnableKeyword("_REFLECTION"); }
+                    else { _target.DisableKeyword("_REFLECTION"); }
                 }
             }
         }
@@ -481,7 +639,7 @@ public class CustomAvatarShaderGUI : ShaderGUI
         if (_isOpenAdvancedSettings)
         {
             EditorGUI.BeginChangeCheck();
-            _enableTex2DArray = EditorGUILayout.Toggle("Enable Tex2DArray", _enableTex2DArray);
+            _enableTex2DArray = EditorGUILayout.Toggle("Tex2DArray", _enableTex2DArray);
 
             if (EditorGUI.EndChangeCheck())
             {
@@ -491,8 +649,27 @@ public class CustomAvatarShaderGUI : ShaderGUI
                 else { _target.DisableKeyword("_TEX_ARRAY"); }
             }
 
+            if (_enableTex2DArray)
+            {
+                EditorGUI.BeginChangeCheck();
+                _enableUVTiling = EditorGUILayout.Toggle("UV Tiling", _enableUVTiling);
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated uv tiling enabled");
+
+                    if (_enableUVTiling) { _target.EnableKeyword("_UVTILING"); }
+                    else { _target.DisableKeyword("_UVTILING"); }
+                }
+
+                if (_enableUVTiling)
+                {
+                    materialEditor.IntegerProperty(_properties.uvTilingX, _properties.uvTilingX.displayName);
+                }
+            }
+
             EditorGUI.BeginChangeCheck();
-            _enableDebugMipmap = EditorGUILayout.Toggle("Enable Debug Mipmap", _enableDebugMipmap);
+            _enableDebugMipmap = EditorGUILayout.Toggle("Debug Mipmap", _enableDebugMipmap);
 
             if (EditorGUI.EndChangeCheck())
             {
@@ -506,12 +683,12 @@ public class CustomAvatarShaderGUI : ShaderGUI
             {
                 if (_enableTex2DArray)
                 {
-                    materialEditor.TexturePropertySingleLine(new GUIContent(_properties.debugMipmapTexArray.displayName), _properties.debugMipmapTexArray);
+                    materialEditor.TexturePropertySingleLine(_debugMipmapGUI, _properties.debugMipmapTexArray);
                     materialEditor.TextureScaleOffsetProperty(_properties.debugMipmapTexArray);
                 }
                 else
                 {
-                    materialEditor.TexturePropertySingleLine(new GUIContent(_properties.debugMipmapTex.displayName), _properties.debugMipmapTex);
+                    materialEditor.TexturePropertySingleLine(_debugMipmapGUI, _properties.debugMipmapTex);
                     materialEditor.TextureScaleOffsetProperty(_properties.debugMipmapTex);
                 }
             }
