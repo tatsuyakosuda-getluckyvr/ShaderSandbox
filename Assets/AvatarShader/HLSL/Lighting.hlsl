@@ -5,13 +5,15 @@
 
 struct CustomLight
 {
+    half4 gradientScale;
+    half4 mouthScale;
     half3 diffuseColor;
     half3 diffuseColor2;
     half3 lightDirection;
     half3 lightDirection2;
     half3 rimLightColor;
     half3 rimLightColor2;
-    half4 gradientScale;
+    half3 anisoHighlightColor;
     half gradientAngle;
     half rimLightPower;
     half rimLightPower2;
@@ -21,6 +23,13 @@ struct CustomLight
     half diffuseIntensity2;
     half rimIntensity;
     half rimIntensity2;
+    half anisoOffset;
+    half anisoPower;
+    half anisoIntensity;
+    half hairUVTileIndex;
+    half mouthAOPower;
+    half mouthUVTileIndex;
+    half mouthAOIntensity;
 };
 
 // https://www.jordanstevenstechart.com/lighting-models
@@ -58,7 +67,7 @@ half3 CalculateDiffusion(half3 color, half3 direction, half3 normalWS, half3 vie
 
 half CalculateNdotV(half3 normalWS, half3 viewDirectionWS)
 {
-#if defined(_REFLECTION) || defined(_RIM_LIGHT)
+#if defined(_REFLECTION) || defined(_RIM_LIGHT) || defined(_CLEARCOAT)
     half nv = saturate(dot(normalWS, viewDirectionWS));
 #else
     half nv = 0;
@@ -75,23 +84,33 @@ half3 CalculateRimLighting(half nDotV, half3 rimColor, half rimPower)
 #endif
 }
 
-half3 CalculateReflectionProbe(InputData inputData, SurfaceData surfaceData, half nDotV, half reflectivity)
+half3 CalculateReflectionProbe(InputData inputData, SurfaceData surfaceData, half nDotV, half reflectivity, half3 reflectVector, half fresnelTerm)
 {
 #ifdef _REFLECTION
     half perceptualRoughness = 1 - surfaceData.smoothness;
     half roughness = perceptualRoughness * perceptualRoughness;
-    half3 reflectVector = reflect(-inputData.viewDirectionWS, inputData.normalWS);
     half3 refl_hdr = GlossyEnvironmentReflection(reflectVector, inputData.positionWS, perceptualRoughness, surfaceData.occlusion, inputData.normalizedScreenSpaceUV);
     half surfaceReduction = 1.0 / (roughness * roughness + 1);
     half3 specular = lerp(kDielectricSpec.rgb, surfaceData.albedo, surfaceData.metallic);
-    refl_hdr *= surfaceReduction * lerp(specular, saturate(surfaceData.smoothness + reflectivity), Pow4(1 - nDotV));
+    refl_hdr *= surfaceReduction * lerp(specular, saturate(surfaceData.smoothness + reflectivity), fresnelTerm);
     return refl_hdr;
 #else
     return 0;
 #endif
 }
 
-half4 UniversalFragmentCustomLighting(InputData inputData, SurfaceData surfaceData, CustomLight light)
+half3 CalculateClearCoatColor(InputData inputData, SurfaceData surfaceData, half nDotV, half reflectivity, half3 reflectVector, half fresnelTerm)
+{
+    half perceptualRoughness = 1 - surfaceData.clearCoatSmoothness;
+    half roughness = perceptualRoughness * perceptualRoughness;
+    half3 refl_hdr = GlossyEnvironmentReflection(reflectVector, inputData.positionWS, perceptualRoughness, surfaceData.occlusion, inputData.normalizedScreenSpaceUV);
+    half surfaceReduction = 1.0 / (roughness * roughness + 1);
+    half3 specular = kDielectricSpec.rgb;
+    refl_hdr *= surfaceReduction * lerp(specular, saturate(surfaceData.clearCoatSmoothness + kDielectricSpec.x), fresnelTerm);
+    return refl_hdr;
+}
+
+half4 UniversalFragmentCustomLighting(InputData inputData, SurfaceData surfaceData, CustomLight light, half3 positionOS, half tileIndex)
 {
 #if defined(DEBUG_DISPLAY)
     half4 debugColor;
@@ -101,15 +120,16 @@ half4 UniversalFragmentCustomLighting(InputData inputData, SurfaceData surfaceDa
 
 #ifdef _GRADIENT_LIGHT
 #if _OBJECT_SPACE_GRADIENT
-    half3 positionOS = TransformWorldToObject(inputData.positionWS);
-    half2 gradient = (-positionOS.xy - light.gradientScale.xy) / (light.gradientScale.zw - light.gradientScale.xy);
+    half2 gradient = (positionOS.xy - light.gradientScale.xy) / (light.gradientScale.zw - light.gradientScale.xy);
 #else
     half2 gradient = (inputData.positionWS.xz - light.gradientScale.xy) / (light.gradientScale.zw - light.gradientScale.xy);
 #endif
+
     half angleCos = cos(radians(light.gradientAngle));
     half angleSin = sin(radians(light.gradientAngle));
     half2x2 rotateMatrix = half2x2(angleCos, -angleSin, angleSin, angleCos);
     gradient = mul(gradient - 0.5, rotateMatrix) + 0.5;
+
 #if _RADIAL_GRADIENT_LIGHT
 #if _EXP_GRADIENT_MODE
     half weight = pow(saturate(length((gradient - 0.5) * 2) + light.gradientOffset), light.gradientPower);
@@ -123,6 +143,7 @@ half4 UniversalFragmentCustomLighting(InputData inputData, SurfaceData surfaceDa
     half weight = saturate(gradient.x + light.gradientOffset);
 #endif
 #endif
+
     half3 diffuseColor = lerp(light.diffuseColor.rgb, light.diffuseColor2.rgb, weight);
     half3 lightDirection = lerp(light.lightDirection.xyz, light.lightDirection2.xyz, weight);
     half3 rimColor = lerp(light.rimLightColor.rgb, light.rimLightColor2.rgb, weight);
@@ -137,14 +158,50 @@ half4 UniversalFragmentCustomLighting(InputData inputData, SurfaceData surfaceDa
     half rimIntensity = light.rimIntensity;
     half rimPower = light.rimLightPower;
 #endif
+
     half3 ambientColor = inputData.bakedGI;
     ambientColor += CalculateDiffusion(diffuseColor, lightDirection, inputData.normalWS, inputData.viewDirectionWS, 1 - surfaceData.smoothness) * lightIntensity;
     half oneMinusReflectivity = OneMinusReflectivityMetallic(surfaceData.metallic);
     half3 col = surfaceData.albedo * oneMinusReflectivity * ambientColor;
+
+#if defined(_REFLECTION) || defined(_RIM_LIGHT) || defined(_CLEARCOAT)
     half nv = CalculateNdotV(inputData.normalWS, inputData.viewDirectionWS);
+#endif
+
+#ifdef _RIM_LIGHT
     col += CalculateRimLighting(nv, rimColor, rimPower) * rimIntensity;
-    col += CalculateReflectionProbe(inputData, surfaceData, nv, 1 - oneMinusReflectivity);
-    return half4(col * surfaceData.occlusion, surfaceData.alpha);
+#endif
+
+#if defined(_REFLECTION) || defined(_CLEARCOAT)
+    half fresnelTerm = Pow4(1 - nv);
+    half3 reflectVector = reflect(-inputData.viewDirectionWS, inputData.normalWS);
+#endif
+
+#ifdef _REFLECTION
+    col += CalculateReflectionProbe(inputData, surfaceData, nv, 1 - oneMinusReflectivity, reflectVector, fresnelTerm);
+#endif
+
+#if _CLEARCOAT
+    half3 coatColor = CalculateClearCoatColor(inputData, surfaceData, nv, 1 - oneMinusReflectivity, reflectVector, fresnelTerm) * surfaceData.clearCoatMask;
+    half coatFresnel = kDielectricSpec.x + kDielectricSpec.a * fresnelTerm;
+    col = lerp(col * (1 - coatFresnel * surfaceData.clearCoatMask) + coatColor, col, step(1, abs(tileIndex - light.mouthUVTileIndex)));
+#endif
+
+#ifdef _ANISOTROPIC_HIGHLIGHT
+    half3 halfDir = normalize(lightDirection + inputData.viewDirectionWS);
+    half hdota = dot(normalize(inputData.normalWS), halfDir);
+    half a = max(0, sin(radians((hdota + light.anisoOffset) * 180)));
+    half spec = saturate(pow(a, light.anisoPower * lightIntensity) * light.anisoIntensity * lightIntensity);
+    col = lerp(col + spec * light.anisoHighlightColor * diffuseColor, col, step(1, abs(tileIndex - light.hairUVTileIndex)));
+#endif
+
+    col = col * surfaceData.occlusion;
+
+#ifdef _MOUTH_SHADOW
+    col = lerp(col * min(1, pow(abs(positionOS.z / light.mouthScale.w - light.mouthScale.y), light.mouthAOPower) * light.mouthAOIntensity), col, step(1, abs(tileIndex - light.mouthUVTileIndex)));
+#endif
+
+    return half4(col, surfaceData.alpha);
 }
 
 #endif

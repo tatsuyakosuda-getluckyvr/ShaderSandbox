@@ -5,6 +5,7 @@ using UnityEditor;
 using UnityEngine.Rendering;
 using System.Linq;
 using UnityEditor.Rendering;
+using System.Security.Cryptography;
 
 public class LuckyAvatarShaderGUI : ShaderGUI
 {
@@ -34,12 +35,29 @@ public class LuckyAvatarShaderGUI : ShaderGUI
         LINEAR, EXPONENTIAL
     }
 
+    public enum SkinDetailMapUV
+    {
+        UV0, UV1, UV2, UV3
+    }
+
+    public enum SkinDetailBlendingMode
+    {
+        NORMAL, DARKEN, MULTIPLY, COLOR_BURN, LINEAR_BURN,
+        LIGHTEN, SCREEN, COLOR_DODGE, LINEAR_DODGE,
+        OVERLAY, SOFT_LIGHT, HARD_LIGHT, VIVID_LIGHT, LINEAR_LIGHT, LINEAR_LIGHT_ADD_SUB, PIN_LIGHT, HARD_MIX,
+        DIFFERENCE, EXCLUSION, SUBTRACT, DIVIDE, NEGATION
+    }
+
+    public enum AsymmetricStamping
+    {
+        BOTH, LEFT, RIGHT
+    }
+
     private class Properties
     {
         public MaterialProperty baseMap;
         public MaterialProperty baseMapArray;
         public MaterialProperty baseMapIndex;
-        public MaterialProperty baseColor;
         public MaterialProperty marMap;
         public MaterialProperty marMapArray;
         public MaterialProperty marMapIndex;
@@ -71,7 +89,41 @@ public class LuckyAvatarShaderGUI : ShaderGUI
         public MaterialProperty diffuseIntensity2;
         public MaterialProperty rimIntensity;
         public MaterialProperty rimIntensity2;
-        public MaterialProperty uvTilingX;
+        public MaterialProperty uvTiles;
+        public MaterialProperty matCapMap;
+        public MaterialProperty deepLayerColor;
+        public MaterialProperty matCapBlend;
+        public MaterialProperty skinColor;
+        public MaterialProperty uvCutoff;
+        public MaterialProperty matCapHSVShift;
+        public MaterialProperty anisoOffset;
+        public MaterialProperty anisoPower;
+        public MaterialProperty anisoIntensity;
+        public MaterialProperty hairUVTileIndex;
+        public MaterialProperty anisoHighlightColor;
+        public MaterialProperty eyesMakeupMapArray;
+        public MaterialProperty eyesMakeupMapArrayIndex;
+        public MaterialProperty eyesMakeupUVTileIndex;
+        public MaterialProperty blushMakeupMapArray;
+        public MaterialProperty blushMakeupMapArrayIndex;
+        public MaterialProperty blushMakeupUVTileIndex;
+        public MaterialProperty lipsMakeupMapArray;
+        public MaterialProperty lipsMakeupMapArrayIndex;
+        public MaterialProperty lipsMakeupUVTileIndex;
+        public MaterialProperty facialTatooMapArray;
+        public MaterialProperty facialTatooMapArrayIndex;
+        public MaterialProperty facialTatooUVTileIndex;
+        public MaterialProperty facialMarkingMapArray;
+        public MaterialProperty facialMarkingMapArrayIndex;
+        public MaterialProperty facialMarkingUVTileIndex;
+        public MaterialProperty mouthScale;
+        public MaterialProperty mouthAOPower;
+        public MaterialProperty mouthUVTileIndex;
+        public MaterialProperty mouthAOIntensity;
+        public MaterialProperty clearCoatMask;
+        public MaterialProperty clearCoatSmoothness;
+        public MaterialProperty hairColor1;
+        public MaterialProperty hairColor2;
     }
 
     private RenderMode _renderMode;
@@ -81,6 +133,18 @@ public class LuckyAvatarShaderGUI : ShaderGUI
     private Properties _properties;
     private GradientStyle _gradientStyle;
     private GradientMode _gradientMode;
+    private SkinDetailMapUV _eyesMakeupMapUV;
+    private SkinDetailBlendingMode _eyesMakeupBlendingMode;
+    private SkinDetailMapUV _blushMakeupMapUV;
+    private SkinDetailBlendingMode _blushMakeupBlendingMode;
+    private SkinDetailMapUV _lipsMakeupMapUV;
+    private SkinDetailBlendingMode _lipsMakeupBlendingMode;
+    private SkinDetailMapUV _facialTatooMapUV;
+    private SkinDetailBlendingMode _facialTatooBlendingMode;
+    private AsymmetricStamping _facialTatooAsymmetry;
+    private SkinDetailMapUV _facialMarkingMapUV;
+    private SkinDetailBlendingMode _facialMarkingBlendingMode;
+    private AsymmetricStamping _facialMarkingAsymmetry;
     private bool _enableMARMap;
     private bool _enableNormalMap;
     private bool _enableDiffuseColor;
@@ -91,6 +155,17 @@ public class LuckyAvatarShaderGUI : ShaderGUI
     private bool _enableGradient;
     private bool _enableUVTiling;
     private bool _enableObjectSpaceGradient;
+    private bool _enableMatCapMap;
+    private bool _enableAnisoHighlight;
+    private bool _enableOneTexture;
+    private bool _enableEyesMakeupMap;
+    private bool _enableBlushMakeupMap;
+    private bool _enableLipsMakeupMap;
+    private bool _enableFacialTatooMap;
+    private bool _enableFacialMarkingMap;
+    private bool _enableMouthShadow;
+    private bool _enableClearCoat;
+    private bool _enableHairColor;
 
     private static readonly string UNLIT_KEYWORD = "_UNLIT";
     private static readonly string SIMPLE_LIT_KEYWORD = "_SIMPLELIT";
@@ -105,11 +180,18 @@ public class LuckyAvatarShaderGUI : ShaderGUI
     private bool _isOpenAdvancedSettings;
     private bool _beforeIsOpenAdvancedSettings;
 
-    private GUIStyle _centerLabel;
+    private GUIStyle _headerLabel;
+    private GUIStyle _warningLabel;
     private GUIContent _baseMapGUI;
     private GUIContent _marMapGUI;
     private GUIContent _normalMapGUI;
     private GUIContent _debugMipmapGUI;
+    private GUIContent _matCapMapGUI;
+    private GUIContent _eyesMakeupMapGUI;
+    private GUIContent _blushMakeupMapGUI;
+    private GUIContent _lipsMakeupMapGUI;
+    private GUIContent _facialTatooMapGUI;
+    private GUIContent _facialMarkingMapGUI;
 
     private enum Expandable
     {
@@ -162,6 +244,8 @@ public class LuckyAvatarShaderGUI : ShaderGUI
                 break;
         }
 
+        UpdateSurfaceType();
+
         if (_target.IsKeywordEnabled("_HALF_LAMBERT"))
         {
             _lightingModel = LightingModel.HALF_LAMBERT;
@@ -193,6 +277,562 @@ public class LuckyAvatarShaderGUI : ShaderGUI
             _gradientMode = GradientMode.LINEAR;
         }
 
+        if (_target.IsKeywordEnabled("_EYES_MAKEUP_UV1"))
+        {
+            _eyesMakeupMapUV = SkinDetailMapUV.UV1;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_UV2"))
+        {
+            _eyesMakeupMapUV = SkinDetailMapUV.UV2;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_UV3"))
+        {
+            _eyesMakeupMapUV = SkinDetailMapUV.UV3;
+        }
+        else
+        {
+            _eyesMakeupMapUV = SkinDetailMapUV.UV0;
+        }
+
+        if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_UV1"))
+        {
+            _blushMakeupMapUV = SkinDetailMapUV.UV1;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_UV2"))
+        {
+            _blushMakeupMapUV = SkinDetailMapUV.UV2;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_UV3"))
+        {
+            _blushMakeupMapUV = SkinDetailMapUV.UV3;
+        }
+        else
+        {
+            _blushMakeupMapUV = SkinDetailMapUV.UV0;
+        }
+
+        if (_target.IsKeywordEnabled("_LIPS_MAKEUP_UV1"))
+        {
+            _lipsMakeupMapUV = SkinDetailMapUV.UV1;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_UV2"))
+        {
+            _lipsMakeupMapUV = SkinDetailMapUV.UV2;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_UV3"))
+        {
+            _lipsMakeupMapUV = SkinDetailMapUV.UV3;
+        }
+        else
+        {
+            _lipsMakeupMapUV = SkinDetailMapUV.UV0;
+        }
+
+        if (_target.IsKeywordEnabled("_FACIAL_TATOO_LEFT"))
+        {
+            _facialTatooAsymmetry = AsymmetricStamping.LEFT;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_RIGHT"))
+        {
+            _facialTatooAsymmetry = AsymmetricStamping.RIGHT;
+        }
+        else
+        {
+            _facialTatooAsymmetry = AsymmetricStamping.BOTH;
+        }
+
+        if (_target.IsKeywordEnabled("_FACIAL_TATOO_UV1"))
+        {
+            _facialTatooMapUV = SkinDetailMapUV.UV1;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_UV2"))
+        {
+            _facialTatooMapUV = SkinDetailMapUV.UV2;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_UV3"))
+        {
+            _facialTatooMapUV = SkinDetailMapUV.UV3;
+        }
+        else
+        {
+            _facialTatooMapUV = SkinDetailMapUV.UV0;
+        }
+
+        if (_target.IsKeywordEnabled("_FACIAL_MARKING_LEFT"))
+        {
+            _facialMarkingAsymmetry = AsymmetricStamping.LEFT;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_RIGHT"))
+        {
+            _facialMarkingAsymmetry = AsymmetricStamping.RIGHT;
+        }
+        else
+        {
+            _facialMarkingAsymmetry = AsymmetricStamping.BOTH;
+        }
+
+        if (_target.IsKeywordEnabled("_FACIAL_MARKING_UV1"))
+        {
+            _facialMarkingMapUV = SkinDetailMapUV.UV1;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_UV2"))
+        {
+            _facialMarkingMapUV = SkinDetailMapUV.UV2;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_UV3"))
+        {
+            _facialMarkingMapUV = SkinDetailMapUV.UV3;
+        }
+        else
+        {
+            _facialMarkingMapUV = SkinDetailMapUV.UV0;
+        }
+
+        if (_target.IsKeywordEnabled("_EYES_MAKEUP_DARKEN"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.DARKEN;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_MULTIPLY"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.MULTIPLY;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_BURN"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.COLOR_BURN;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_LNEARBURN"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.LINEAR_BURN;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_LIGHTEN"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.LIGHTEN;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_SCREEN"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.SCREEN;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_DODGE"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.COLOR_DODGE;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_LINEAR_DODGE"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.LINEAR_DODGE;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_OVERLAY"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.OVERLAY;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_SOFTLIGHT"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.SOFT_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_HARDLIGHT"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.HARD_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_VIVIDLIGHT"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.VIVID_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_LINEARLIGHT"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.LINEAR_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_LINEARLIGHTADDSUB"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.LINEAR_LIGHT_ADD_SUB;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_PINLIGHT"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.PIN_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_HARDMIX"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.HARD_MIX;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_DIFF"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.DIFFERENCE;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_EXCLUSION"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.EXCLUSION;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_SUBTRACT"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.SUBTRACT;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_DIVIDE"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.DIVIDE;
+        }
+        else if (_target.IsKeywordEnabled("_EYES_MAKEUP_NEGATION"))
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.NEGATION;
+        }
+        else
+        {
+            _eyesMakeupBlendingMode = SkinDetailBlendingMode.NORMAL;
+        }
+
+        if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_DARKEN"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.DARKEN;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_MULTIPLY"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.MULTIPLY;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_BURN"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.COLOR_BURN;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_LNEARBURN"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.LINEAR_BURN;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_LIGHTEN"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.LIGHTEN;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_SCREEN"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.SCREEN;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_DODGE"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.COLOR_DODGE;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_LINEAR_DODGE"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.LINEAR_DODGE;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_OVERLAY"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.OVERLAY;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_SOFTLIGHT"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.SOFT_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_HARDLIGHT"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.HARD_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_VIVIDLIGHT"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.VIVID_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_LINEARLIGHT"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.LINEAR_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_LINEARLIGHTADDSUB"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.LINEAR_LIGHT_ADD_SUB;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_PINLIGHT"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.PIN_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_HARDMIX"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.HARD_MIX;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_DIFF"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.DIFFERENCE;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_EXCLUSION"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.EXCLUSION;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_SUBTRACT"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.SUBTRACT;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_DIVIDE"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.DIVIDE;
+        }
+        else if (_target.IsKeywordEnabled("_BLUSH_MAKEUP_NEGATION"))
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.NEGATION;
+        }
+        else
+        {
+            _blushMakeupBlendingMode = SkinDetailBlendingMode.NORMAL;
+        }
+
+        if (_target.IsKeywordEnabled("_LIPS_MAKEUP_DARKEN"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.DARKEN;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_MULTIPLY"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.MULTIPLY;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_BURN"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.COLOR_BURN;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_LNEARBURN"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.LINEAR_BURN;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_LIGHTEN"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.LIGHTEN;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_SCREEN"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.SCREEN;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_DODGE"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.COLOR_DODGE;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_LINEAR_DODGE"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.LINEAR_DODGE;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_OVERLAY"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.OVERLAY;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_SOFTLIGHT"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.SOFT_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_HARDLIGHT"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.HARD_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_VIVIDLIGHT"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.VIVID_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_LINEARLIGHT"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.LINEAR_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_LINEARLIGHTADDSUB"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.LINEAR_LIGHT_ADD_SUB;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_PINLIGHT"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.PIN_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_HARDMIX"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.HARD_MIX;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_DIFF"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.DIFFERENCE;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_EXCLUSION"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.EXCLUSION;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_SUBTRACT"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.SUBTRACT;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_DIVIDE"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.DIVIDE;
+        }
+        else if (_target.IsKeywordEnabled("_LIPS_MAKEUP_NEGATION"))
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.NEGATION;
+        }
+        else
+        {
+            _lipsMakeupBlendingMode = SkinDetailBlendingMode.NORMAL;
+        }
+
+        if (_target.IsKeywordEnabled("_FACIAL_TATOO_DARKEN"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.DARKEN;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_MULTIPLY"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.MULTIPLY;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_BURN"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.COLOR_BURN;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_LNEARBURN"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.LINEAR_BURN;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_LIGHTEN"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.LIGHTEN;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_SCREEN"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.SCREEN;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_DODGE"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.COLOR_DODGE;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_LINEAR_DODGE"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.LINEAR_DODGE;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_OVERLAY"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.OVERLAY;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_SOFTLIGHT"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.SOFT_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_HARDLIGHT"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.HARD_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_VIVIDLIGHT"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.VIVID_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_LINEARLIGHT"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.LINEAR_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_LINEARLIGHTADDSUB"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.LINEAR_LIGHT_ADD_SUB;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_PINLIGHT"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.PIN_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_HARDMIX"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.HARD_MIX;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_DIFF"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.DIFFERENCE;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_EXCLUSION"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.EXCLUSION;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_SUBTRACT"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.SUBTRACT;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_DIVIDE"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.DIVIDE;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_TATOO_NEGATION"))
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.NEGATION;
+        }
+        else
+        {
+            _facialTatooBlendingMode = SkinDetailBlendingMode.NORMAL;
+        }
+
+        if (_target.IsKeywordEnabled("_FACIAL_MARKING_DARKEN"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.DARKEN;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_MULTIPLY"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.MULTIPLY;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_BURN"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.COLOR_BURN;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_LNEARBURN"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.LINEAR_BURN;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_LIGHTEN"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.LIGHTEN;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_SCREEN"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.SCREEN;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_DODGE"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.COLOR_DODGE;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_LINEAR_DODGE"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.LINEAR_DODGE;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_OVERLAY"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.OVERLAY;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_SOFTLIGHT"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.SOFT_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_HARDLIGHT"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.HARD_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_VIVIDLIGHT"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.VIVID_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_LINEARLIGHT"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.LINEAR_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_LINEARLIGHTADDSUB"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.LINEAR_LIGHT_ADD_SUB;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_PINLIGHT"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.PIN_LIGHT;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_HARDMIX"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.HARD_MIX;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_DIFF"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.DIFFERENCE;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_EXCLUSION"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.EXCLUSION;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_SUBTRACT"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.SUBTRACT;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_DIVIDE"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.DIVIDE;
+        }
+        else if (_target.IsKeywordEnabled("_FACIAL_MARKING_NEGATION"))
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.NEGATION;
+        }
+        else
+        {
+            _facialMarkingBlendingMode = SkinDetailBlendingMode.NORMAL;
+        }
+
         _isOpenSurfaceOptions = IsExpanded((uint)Expandable.SurfaceOptions);
         _beforeIsOpenSurfaceOptions = _isOpenSurfaceOptions;
         _isOpenSurfaceInputs = IsExpanded((uint)Expandable.SurfaceInputs);
@@ -202,11 +842,19 @@ public class LuckyAvatarShaderGUI : ShaderGUI
         _isOpenAdvancedSettings = IsExpanded((uint)Expandable.Advanced);
         _beforeIsOpenAdvancedSettings = _isOpenAdvancedSettings;
 
-        _centerLabel = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 13 };
+        _headerLabel = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 13 };
+        _warningLabel = new GUIStyle(GUI.skin.label);
+        _warningLabel.normal.textColor = Color.yellow;
         _baseMapGUI = new GUIContent("BaseMap");
         _marMapGUI = new GUIContent("MARMap", "Metallic(R) AO(G) Roughness(B)");
         _normalMapGUI = new GUIContent("NormalMap");
         _debugMipmapGUI = new GUIContent("DebugMipmapTexture");
+        _matCapMapGUI = new GUIContent("MatCapMap");
+        _eyesMakeupMapGUI = new GUIContent("EyesMakeupMap");
+        _blushMakeupMapGUI = new GUIContent("BlushMakeupMap");
+        _lipsMakeupMapGUI = new GUIContent("LipsMakeupMap");
+        _facialTatooMapGUI = new GUIContent("FacialTatooMap");
+        _facialMarkingMapGUI = new GUIContent("FacialMarkingMap");
     }
 
     public override void OnGUI(MaterialEditor materialEditor, MaterialProperty[] properties)
@@ -219,7 +867,6 @@ public class LuckyAvatarShaderGUI : ShaderGUI
             _properties.baseMap = properties.FirstOrDefault(x => x.name == "_BaseMap");
             _properties.baseMapArray = properties.FirstOrDefault(x => x.name == "_BaseMapArray");
             _properties.baseMapIndex = properties.FirstOrDefault(x => x.name == "_BaseMapIndex");
-            _properties.baseColor = properties.FirstOrDefault(x => x.name == "_BaseColor");
             _properties.marMap = properties.FirstOrDefault(x => x.name == "_MARMap");
             _properties.marMapArray = properties.FirstOrDefault(x => x.name == "_MARMapArray");
             _properties.marMapIndex = properties.FirstOrDefault(x => x.name == "_MARMapIndex");
@@ -251,7 +898,41 @@ public class LuckyAvatarShaderGUI : ShaderGUI
             _properties.diffuseIntensity2 = properties.FirstOrDefault(x => x.name == "_DiffuseIntensity2");
             _properties.rimIntensity = properties.FirstOrDefault(x => x.name == "_RimIntensity");
             _properties.rimIntensity2 = properties.FirstOrDefault(x => x.name == "_RimIntensity2");
-            _properties.uvTilingX = properties.FirstOrDefault(x => x.name == "_UVTilingX");
+            _properties.uvTiles = properties.FirstOrDefault(x => x.name == "_UVTiles");
+            _properties.matCapMap = properties.FirstOrDefault(x => x.name == "_MatCapMap");
+            _properties.deepLayerColor = properties.FirstOrDefault(x => x.name == "_DeepLayerColor");
+            _properties.matCapBlend = properties.FirstOrDefault(x => x.name == "_MatCapBlend");
+            _properties.skinColor = properties.FirstOrDefault(x => x.name == "_SkinColor");
+            _properties.uvCutoff = properties.FirstOrDefault(x => x.name == "_UVCutoff");
+            _properties.matCapHSVShift = properties.FirstOrDefault(x => x.name == "_MatCapHSVShift");
+            _properties.anisoOffset = properties.FirstOrDefault(x => x.name == "_AnisoOffset");
+            _properties.anisoPower = properties.FirstOrDefault(x => x.name == "_AnisoPower");
+            _properties.anisoIntensity = properties.FirstOrDefault(x => x.name == "_AnisoIntensity");
+            _properties.hairUVTileIndex = properties.FirstOrDefault(x => x.name == "_HairUVTileIndex");
+            _properties.anisoHighlightColor = properties.FirstOrDefault(x => x.name == "_AnisoHighlightColor");
+            _properties.eyesMakeupMapArray = properties.FirstOrDefault(x => x.name == "_EyesMakeupMapArray");
+            _properties.eyesMakeupMapArrayIndex = properties.FirstOrDefault(x => x.name == "_EyesMakeupMapArrayIndex");
+            _properties.eyesMakeupUVTileIndex = properties.FirstOrDefault(x => x.name == "_EyesMakeupUVTileInedx");
+            _properties.blushMakeupMapArray = properties.FirstOrDefault(x => x.name == "_BlushMakeupMapArray");
+            _properties.blushMakeupMapArrayIndex = properties.FirstOrDefault(x => x.name == "_BlushMakeupMapArrayIndex");
+            _properties.blushMakeupUVTileIndex = properties.FirstOrDefault(x => x.name == "_BlushMakeupUVTileInedx");
+            _properties.lipsMakeupMapArray = properties.FirstOrDefault(x => x.name == "_LipsMakeupMapArray");
+            _properties.lipsMakeupMapArrayIndex = properties.FirstOrDefault(x => x.name == "_LipsMakeupMapArrayIndex");
+            _properties.lipsMakeupUVTileIndex = properties.FirstOrDefault(x => x.name == "_LipsMakeupUVTileInedx");
+            _properties.facialTatooMapArray = properties.FirstOrDefault(x => x.name == "_FacialTatooMapArray");
+            _properties.facialTatooMapArrayIndex = properties.FirstOrDefault(x => x.name == "_FacialTatooMapArrayIndex");
+            _properties.facialTatooUVTileIndex = properties.FirstOrDefault(x => x.name == "_FacialTatooUVTileInedx");
+            _properties.facialMarkingMapArray = properties.FirstOrDefault(x => x.name == "_FacialMarkingMapArray");
+            _properties.facialMarkingMapArrayIndex = properties.FirstOrDefault(x => x.name == "_FacialMarkingMapArrayIndex");
+            _properties.facialMarkingUVTileIndex = properties.FirstOrDefault(x => x.name == "_FacialMarkingUVTileInedx");
+            _properties.mouthScale = properties.FirstOrDefault(x => x.name == "_MouthScale");
+            _properties.mouthAOPower = properties.FirstOrDefault(x => x.name == "_MouthAOPower");
+            _properties.mouthUVTileIndex = properties.FirstOrDefault(x => x.name == "_MouthUVTileIndex");
+            _properties.mouthAOIntensity = properties.FirstOrDefault(x => x.name == "_MouthAOIntensity");
+            _properties.clearCoatMask = properties.FirstOrDefault(x => x.name == "_ClearCoatMask");
+            _properties.clearCoatSmoothness = properties.FirstOrDefault(x => x.name == "_ClearCoatSmoothness");
+            _properties.hairColor1 = properties.FirstOrDefault(x => x.name == "_HairColor1");
+            _properties.hairColor2 = properties.FirstOrDefault(x => x.name == "_HairColor2");
         }
 
         Initialize();
@@ -266,6 +947,17 @@ public class LuckyAvatarShaderGUI : ShaderGUI
         _enableGradient = _target.IsKeywordEnabled("_GRADIENT_LIGHT");
         _enableUVTiling = _target.IsKeywordEnabled("_UVTILING");
         _enableObjectSpaceGradient = _target.IsKeywordEnabled("_OBJECT_SPACE_GRADIENT");
+        _enableMatCapMap = _target.IsKeywordEnabled("_MATCAPMAP");
+        _enableAnisoHighlight = _target.IsKeywordEnabled("_ANISOTROPIC_HIGHLIGHT");
+        _enableOneTexture = _target.IsKeywordEnabled("_ONE_TEXTURE");
+        _enableEyesMakeupMap = _target.IsKeywordEnabled("_EYES_MAKEUPMAP");
+        _enableBlushMakeupMap = _target.IsKeywordEnabled("_BLUSH_MAKEUPMAP");
+        _enableLipsMakeupMap = _target.IsKeywordEnabled("_LIPS_MAKEUPMAP");
+        _enableFacialTatooMap = _target.IsKeywordEnabled("_FACIAL_TATOOMAP");
+        _enableFacialMarkingMap = _target.IsKeywordEnabled("_FACIAL_MARKINGMAP");
+        _enableMouthShadow = _target.IsKeywordEnabled("_MOUTH_SHADOW");
+        _enableClearCoat = _target.IsKeywordEnabled("_CLEARCOAT");
+        _enableHairColor = _target.IsKeywordEnabled("_HAIRCOLOR");
 
         _isOpenSurfaceOptions = CoreEditorUtils.DrawHeaderFoldout("Surface Options", _isOpenSurfaceOptions);
 
@@ -311,21 +1003,50 @@ public class LuckyAvatarShaderGUI : ShaderGUI
 
         if (_isOpenSurfaceInputs)
         {
-            EditorGUILayout.LabelField("BaseColor Settings", _centerLabel);
+            EditorGUILayout.LabelField("BaseColor Settings", _headerLabel);
+            materialEditor.ColorProperty(_properties.skinColor, "Skin Tint Color");
+            EditorGUILayout.Space(5);
+
             if (_enableTex2DArray)
             {
-                materialEditor.TexturePropertySingleLine(_baseMapGUI, _properties.baseMapArray, _properties.baseColor);
+                materialEditor.TexturePropertySingleLine(_baseMapGUI, _properties.baseMapArray, null);
                 materialEditor.IntegerProperty(_properties.baseMapIndex, _properties.baseMapIndex.displayName);
             }
             else
             {
-                materialEditor.TexturePropertySingleLine(_baseMapGUI, _properties.baseMap, _properties.baseColor);
+                materialEditor.TexturePropertySingleLine(_baseMapGUI, _properties.baseMap, null);
             }
 
             if (_renderMode != RenderMode.UNITY_UNLIT)
             {
                 EditorGUILayout.Space(10);
-                EditorGUILayout.LabelField("MAR Settings", _centerLabel);
+                EditorGUILayout.LabelField("SSS Settings", _headerLabel);
+                EditorGUI.BeginChangeCheck();
+                _enableMatCapMap = EditorGUILayout.Toggle("MatCapMap", _enableMatCapMap);
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated matcap map enabled");
+
+                    if (_enableMatCapMap) { _target.EnableKeyword("_MATCAPMAP"); }
+                    else { _target.DisableKeyword("_MATCAPMAP"); }
+                }
+
+                if (_enableMatCapMap)
+                {
+                    materialEditor.TexturePropertySingleLine(_matCapMapGUI, _properties.matCapMap, _properties.deepLayerColor);
+                    materialEditor.RangeProperty(_properties.matCapBlend, _properties.matCapBlend.displayName);
+                    float h = _properties.matCapHSVShift.vectorValue.x;
+                    h = EditorGUILayout.Slider("H", h, 0, 1);
+                    float s = _properties.matCapHSVShift.vectorValue.y;
+                    s = EditorGUILayout.Slider("S", s, -1, 1);
+                    float v = _properties.matCapHSVShift.vectorValue.z;
+                    v = EditorGUILayout.Slider("V", v, -1, 1);
+                    _properties.matCapHSVShift.vectorValue = new Vector4(h, s, v, 0);
+                }
+
+                EditorGUILayout.Space(10);
+                EditorGUILayout.LabelField("MAR Settings", _headerLabel);
                 EditorGUI.BeginChangeCheck();
                 _enableMARMap = EditorGUILayout.Toggle("Enable MAR Map", _enableMARMap);
 
@@ -371,7 +1092,7 @@ public class LuckyAvatarShaderGUI : ShaderGUI
                 if (_renderMode != RenderMode.UNITY_SIMPLE_LIT)
                 {
                     EditorGUILayout.Space(10);
-                    EditorGUILayout.LabelField("Normal Settings", _centerLabel);
+                    EditorGUILayout.LabelField("Normal Settings", _headerLabel);
                     EditorGUI.BeginChangeCheck();
                     _enableNormalMap = EditorGUILayout.Toggle("Enable Normal Map", _enableNormalMap);
 
@@ -399,9 +1120,808 @@ public class LuckyAvatarShaderGUI : ShaderGUI
             }
 
             EditorGUILayout.Space(10);
-            EditorGUILayout.LabelField("Common Settings", _centerLabel);
+            EditorGUILayout.LabelField("EyesMakeup Settings", _headerLabel);
+            EditorGUI.BeginChangeCheck();
+            _enableEyesMakeupMap = EditorGUILayout.Toggle("EyesMakeup", _enableEyesMakeupMap);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(_target, "Updated eyesmakeup map enabled");
+
+                if (_enableEyesMakeupMap) { _target.EnableKeyword("_EYES_MAKEUPMAP"); }
+                else { _target.DisableKeyword("_EYES_MAKEUPMAP"); }
+
+            }
+
+            if (_enableEyesMakeupMap)
+            {
+                materialEditor.TexturePropertySingleLine(_eyesMakeupMapGUI, _properties.eyesMakeupMapArray, null);
+                materialEditor.IntegerProperty(_properties.eyesMakeupMapArrayIndex, _properties.eyesMakeupMapArrayIndex.displayName);
+                EditorGUI.BeginChangeCheck();
+                _eyesMakeupMapUV = (SkinDetailMapUV)EditorGUILayout.EnumPopup("UV", _eyesMakeupMapUV);
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated uv channel of eyesmakeupmap");
+
+                    switch (_eyesMakeupMapUV)
+                    {
+                        case SkinDetailMapUV.UV1:
+                            _target.EnableKeyword("_EYES_MAKEUP_UV1");
+                            _target.DisableKeyword("_EYES_MAKEUP_UV2");
+                            _target.DisableKeyword("_EYES_MAKEUP_UV3");
+                            break;
+                        case SkinDetailMapUV.UV2:
+                            _target.DisableKeyword("_EYES_MAKEUP_UV1");
+                            _target.EnableKeyword("_EYES_MAKEUP_UV2");
+                            _target.DisableKeyword("_EYES_MAKEUP_UV3");
+                            break;
+                        case SkinDetailMapUV.UV3:
+                            _target.DisableKeyword("_EYES_MAKEUP_UV1");
+                            _target.DisableKeyword("_EYES_MAKEUP_UV2");
+                            _target.EnableKeyword("_EYES_MAKEUP_UV3");
+                            break;
+                        case SkinDetailMapUV.UV0:
+                        default:
+                            _target.DisableKeyword("_EYES_MAKEUP_UV1");
+                            _target.DisableKeyword("_EYES_MAKEUP_UV2");
+                            _target.DisableKeyword("_EYES_MAKEUP_UV3");
+                            break;
+                    }
+                }
+
+                EditorGUI.BeginChangeCheck();
+                _eyesMakeupBlendingMode = (SkinDetailBlendingMode)EditorGUILayout.Popup("Blending Mode", (int)_eyesMakeupBlendingMode, new string[]
+                {
+                    "NORMAL", "DARKEN", "MULTIPLY", "COLOR_BURN", "LINEAR_BURN",
+                    "LIGHTEN", "SCREEN", "COLOR_DODGE", "LINEAR_DODGE",
+                    "*OVERLAY", "*SOFT_LIGHT", "*HARD_LIGHT", "*VIVID_LIGHT", "LINEAR_LIGHT", "LINEAR_LIGHT_ADD_SUB", "*PIN_LIGHT", "HARD_MIX",
+                    "DIFFERENCE", "EXCLUSION", "SUBTRACT", "DIVIDE", "NEGATION"
+                });
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated blending mode of eyesmakeup map");
+                    ResetEyesMakeupBlendingMode();
+
+                    switch (_eyesMakeupBlendingMode)
+                    {
+                        case SkinDetailBlendingMode.DARKEN:
+                            _target.EnableKeyword("_EYES_MAKEUP_DARKEN");
+                            break;
+                        case SkinDetailBlendingMode.MULTIPLY:
+                            _target.EnableKeyword("_EYES_MAKEUP_MULTIPLY");
+                            break;
+                        case SkinDetailBlendingMode.COLOR_BURN:
+                            _target.EnableKeyword("_EYES_MAKEUP_BURN");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_BURN:
+                            _target.EnableKeyword("_EYES_MAKEUP_LINEARBURN");
+                            break;
+                        case SkinDetailBlendingMode.LIGHTEN:
+                            _target.EnableKeyword("_EYES_MAKEUP_LIGHTEN");
+                            break;
+                        case SkinDetailBlendingMode.SCREEN:
+                            _target.EnableKeyword("_EYES_MAKEUP_SCREEN");
+                            break;
+                        case SkinDetailBlendingMode.COLOR_DODGE:
+                            _target.EnableKeyword("_EYES_MAKEUP_DODGE");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_DODGE:
+                            _target.EnableKeyword("_EYES_MAKEUP_LINEARDODGE");
+                            break;
+                        case SkinDetailBlendingMode.OVERLAY:
+                            _target.EnableKeyword("_EYES_MAKEUP_OVERLAY");
+                            break;
+                        case SkinDetailBlendingMode.SOFT_LIGHT:
+                            _target.EnableKeyword("_EYES_MAKEUP_SOFTLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.HARD_LIGHT:
+                            _target.EnableKeyword("_EYES_MAKEUP_HARDLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.VIVID_LIGHT:
+                            _target.EnableKeyword("_EYES_MAKEUP_VIVIDLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_LIGHT:
+                            _target.EnableKeyword("_EYES_MAKEUP_LINEARLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_LIGHT_ADD_SUB:
+                            _target.EnableKeyword("_EYES_MAKEUP_LINEARLIGHTADDSUB");
+                            break;
+                        case SkinDetailBlendingMode.PIN_LIGHT:
+                            _target.EnableKeyword("_EYES_MAKEUP_PINLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.HARD_MIX:
+                            _target.EnableKeyword("_EYES_MAKEUP_HARDMIX");
+                            break;
+                        case SkinDetailBlendingMode.DIFFERENCE:
+                            _target.EnableKeyword("_EYES_MAKEUP_DIFF");
+                            break;
+                        case SkinDetailBlendingMode.EXCLUSION:
+                            _target.EnableKeyword("_EYES_MAKEUP_EXCLUSION");
+                            break;
+                        case SkinDetailBlendingMode.SUBTRACT:
+                            _target.EnableKeyword("_EYES_MAKEUP_SUBTRACT");
+                            break;
+                        case SkinDetailBlendingMode.NEGATION:
+                            _target.EnableKeyword("_EYES_MAKEUP_NEGATION");
+                            break;
+                        case SkinDetailBlendingMode.NORMAL:
+                        default:
+                            break;
+                    }
+                }
+
+                EditorGUILayout.LabelField("*These blending mode is more expensive than others", _warningLabel);
+
+                if (_enableUVTiling) { materialEditor.IntegerProperty(_properties.eyesMakeupUVTileIndex, _properties.eyesMakeupUVTileIndex.displayName); }
+            }
+
+            EditorGUILayout.Space(10);
+            EditorGUILayout.LabelField("BlushMakeup Settings", _headerLabel);
+            EditorGUI.BeginChangeCheck();
+            _enableBlushMakeupMap = EditorGUILayout.Toggle("BlushMakeup", _enableBlushMakeupMap);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(_target, "Updated blushmakeup map enabled");
+
+                if (_enableBlushMakeupMap) { _target.EnableKeyword("_BLUSH_MAKEUPMAP"); }
+                else { _target.DisableKeyword("_BLUSH_MAKEUPMAP"); }
+            }
+
+            if (_enableBlushMakeupMap)
+            {
+                materialEditor.TexturePropertySingleLine(_blushMakeupMapGUI, _properties.blushMakeupMapArray, null);
+                materialEditor.IntegerProperty(_properties.blushMakeupMapArrayIndex, _properties.blushMakeupMapArrayIndex.displayName);
+                EditorGUI.BeginChangeCheck();
+                _blushMakeupMapUV = (SkinDetailMapUV)EditorGUILayout.EnumPopup("UV", _blushMakeupMapUV);
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated uv channel of blushmakeupmap");
+
+                    switch (_blushMakeupMapUV)
+                    {
+                        case SkinDetailMapUV.UV1:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_UV1");
+                            _target.DisableKeyword("_BLUSH_MAKEUP_UV2");
+                            _target.DisableKeyword("_BLUSH_MAKEUP_UV3");
+                            break;
+                        case SkinDetailMapUV.UV2:
+                            _target.DisableKeyword("_BLUSH_MAKEUP_UV1");
+                            _target.EnableKeyword("_BLUSH_MAKEUP_UV2");
+                            _target.DisableKeyword("_BLUSH_MAKEUP_UV3");
+                            break;
+                        case SkinDetailMapUV.UV3:
+                            _target.DisableKeyword("_BLUSH_MAKEUP_UV1");
+                            _target.DisableKeyword("_BLUSH_MAKEUP_UV2");
+                            _target.EnableKeyword("_BLUSH_MAKEUP_UV3");
+                            break;
+                        case SkinDetailMapUV.UV0:
+                        default:
+                            _target.DisableKeyword("_BLUSH_MAKEUP_UV1");
+                            _target.DisableKeyword("_BLUSH_MAKEUP_UV2");
+                            _target.DisableKeyword("_BLUSH_MAKEUP_UV3");
+                            break;
+                    }
+                }
+
+                EditorGUI.BeginChangeCheck();
+                _blushMakeupBlendingMode = (SkinDetailBlendingMode)EditorGUILayout.Popup("Blending Mode", (int)_blushMakeupBlendingMode, new string[]
+                {
+                    "NORMAL", "DARKEN", "MULTIPLY", "COLOR_BURN", "LINEAR_BURN",
+                    "LIGHTEN", "SCREEN", "COLOR_DODGE", "LINEAR_DODGE",
+                    "*OVERLAY", "*SOFT_LIGHT", "*HARD_LIGHT", "*VIVID_LIGHT", "LINEAR_LIGHT", "LINEAR_LIGHT_ADD_SUB", "*PIN_LIGHT", "HARD_MIX",
+                    "DIFFERENCE", "EXCLUSION", "SUBTRACT", "DIVIDE", "NEGATION"
+                });
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated blending mode of blushmakeup map");
+                    ResetBlushMakeupBlendingMode();
+
+                    switch (_blushMakeupBlendingMode)
+                    {
+                        case SkinDetailBlendingMode.DARKEN:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_DARKEN");
+                            break;
+                        case SkinDetailBlendingMode.MULTIPLY:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_MULTIPLY");
+                            break;
+                        case SkinDetailBlendingMode.COLOR_BURN:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_BURN");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_BURN:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_LINEARBURN");
+                            break;
+                        case SkinDetailBlendingMode.LIGHTEN:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_LIGHTEN");
+                            break;
+                        case SkinDetailBlendingMode.SCREEN:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_SCREEN");
+                            break;
+                        case SkinDetailBlendingMode.COLOR_DODGE:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_DODGE");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_DODGE:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_LINEARDODGE");
+                            break;
+                        case SkinDetailBlendingMode.OVERLAY:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_OVERLAY");
+                            break;
+                        case SkinDetailBlendingMode.SOFT_LIGHT:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_SOFTLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.HARD_LIGHT:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_HARDLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.VIVID_LIGHT:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_VIVIDLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_LIGHT:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_LINEARLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_LIGHT_ADD_SUB:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_LINEARLIGHTADDSUB");
+                            break;
+                        case SkinDetailBlendingMode.PIN_LIGHT:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_PINLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.HARD_MIX:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_HARDMIX");
+                            break;
+                        case SkinDetailBlendingMode.DIFFERENCE:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_DIFF");
+                            break;
+                        case SkinDetailBlendingMode.EXCLUSION:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_EXCLUSION");
+                            break;
+                        case SkinDetailBlendingMode.SUBTRACT:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_SUBTRACT");
+                            break;
+                        case SkinDetailBlendingMode.NEGATION:
+                            _target.EnableKeyword("_BLUSH_MAKEUP_NEGATION");
+                            break;
+                        case SkinDetailBlendingMode.NORMAL:
+                        default:
+                            break;
+                    }
+                }
+
+                EditorGUILayout.LabelField("*These blending mode is more expensive than others", _warningLabel);
+
+                if (_enableUVTiling) { materialEditor.IntegerProperty(_properties.blushMakeupUVTileIndex, _properties.blushMakeupUVTileIndex.displayName); }
+            }
+
+            EditorGUILayout.Space(10);
+            EditorGUILayout.LabelField("LipsMakeup Settings", _headerLabel);
+            EditorGUI.BeginChangeCheck();
+            _enableLipsMakeupMap = EditorGUILayout.Toggle("LipsMakeup", _enableLipsMakeupMap);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(_target, "Updated lipsmakeup map enabled");
+
+                if (_enableLipsMakeupMap) { _target.EnableKeyword("_LIPS_MAKEUPMAP"); }
+                else { _target.DisableKeyword("_LIPS_MAKEUPMAP"); }
+
+            }
+
+            if (_enableLipsMakeupMap)
+            {
+                materialEditor.TexturePropertySingleLine(_lipsMakeupMapGUI, _properties.lipsMakeupMapArray, null);
+                materialEditor.IntegerProperty(_properties.lipsMakeupMapArrayIndex, _properties.lipsMakeupMapArrayIndex.displayName);
+                EditorGUI.BeginChangeCheck();
+                _lipsMakeupMapUV = (SkinDetailMapUV)EditorGUILayout.EnumPopup("UV", _lipsMakeupMapUV);
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated uv channel of lipsmakeupmap");
+
+                    switch (_lipsMakeupMapUV)
+                    {
+                        case SkinDetailMapUV.UV1:
+                            _target.EnableKeyword("_LIPS_MAKEUP_UV1");
+                            _target.DisableKeyword("_LIPS_MAKEUP_UV2");
+                            _target.DisableKeyword("_LIPS_MAKEUP_UV3");
+                            break;
+                        case SkinDetailMapUV.UV2:
+                            _target.DisableKeyword("_LIPS_MAKEUP_UV1");
+                            _target.EnableKeyword("_LIPS_MAKEUP_UV2");
+                            _target.DisableKeyword("_LIPS_MAKEUP_UV3");
+                            break;
+                        case SkinDetailMapUV.UV3:
+                            _target.DisableKeyword("_LIPS_MAKEUP_UV1");
+                            _target.DisableKeyword("_LIPS_MAKEUP_UV2");
+                            _target.EnableKeyword("_LIPS_MAKEUP_UV3");
+                            break;
+                        case SkinDetailMapUV.UV0:
+                        default:
+                            _target.DisableKeyword("_LIPS_MAKEUP_UV1");
+                            _target.DisableKeyword("_LIPS_MAKEUP_UV2");
+                            _target.DisableKeyword("_LIPS_MAKEUP_UV3");
+                            break;
+                    }
+                }
+
+                EditorGUI.BeginChangeCheck();
+                _lipsMakeupBlendingMode = (SkinDetailBlendingMode)EditorGUILayout.Popup("Blending Mode", (int)_lipsMakeupBlendingMode, new string[]
+                {
+                    "NORMAL", "DARKEN", "MULTIPLY", "COLOR_BURN", "LINEAR_BURN",
+                    "LIGHTEN", "SCREEN", "COLOR_DODGE", "LINEAR_DODGE",
+                    "*OVERLAY", "*SOFT_LIGHT", "*HARD_LIGHT", "*VIVID_LIGHT", "LINEAR_LIGHT", "LINEAR_LIGHT_ADD_SUB", "*PIN_LIGHT", "HARD_MIX",
+                    "DIFFERENCE", "EXCLUSION", "SUBTRACT", "DIVIDE", "NEGATION"
+                });
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated blending mode of lipsmakeup map");
+                    ResetLipsMakeupBlendingMode();
+
+                    switch (_lipsMakeupBlendingMode)
+                    {
+                        case SkinDetailBlendingMode.DARKEN:
+                            _target.EnableKeyword("_LIPS_MAKEUP_DARKEN");
+                            break;
+                        case SkinDetailBlendingMode.MULTIPLY:
+                            _target.EnableKeyword("_LIPS_MAKEUP_MULTIPLY");
+                            break;
+                        case SkinDetailBlendingMode.COLOR_BURN:
+                            _target.EnableKeyword("_LIPS_MAKEUP_BURN");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_BURN:
+                            _target.EnableKeyword("_LIPS_MAKEUP_LINEARBURN");
+                            break;
+                        case SkinDetailBlendingMode.LIGHTEN:
+                            _target.EnableKeyword("_LIPS_MAKEUP_LIGHTEN");
+                            break;
+                        case SkinDetailBlendingMode.SCREEN:
+                            _target.EnableKeyword("_LIPS_MAKEUP_SCREEN");
+                            break;
+                        case SkinDetailBlendingMode.COLOR_DODGE:
+                            _target.EnableKeyword("_LIPS_MAKEUP_DODGE");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_DODGE:
+                            _target.EnableKeyword("_LIPS_MAKEUP_LINEARDODGE");
+                            break;
+                        case SkinDetailBlendingMode.OVERLAY:
+                            _target.EnableKeyword("_LIPS_MAKEUP_OVERLAY");
+                            break;
+                        case SkinDetailBlendingMode.SOFT_LIGHT:
+                            _target.EnableKeyword("_LIPS_MAKEUP_SOFTLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.HARD_LIGHT:
+                            _target.EnableKeyword("_LIPS_MAKEUP_HARDLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.VIVID_LIGHT:
+                            _target.EnableKeyword("_LIPS_MAKEUP_VIVIDLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_LIGHT:
+                            _target.EnableKeyword("_LIPS_MAKEUP_LINEARLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_LIGHT_ADD_SUB:
+                            _target.EnableKeyword("_LIPS_MAKEUP_LINEARLIGHTADDSUB");
+                            break;
+                        case SkinDetailBlendingMode.PIN_LIGHT:
+                            _target.EnableKeyword("_LIPS_MAKEUP_PINLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.HARD_MIX:
+                            _target.EnableKeyword("_LIPS_MAKEUP_HARDMIX");
+                            break;
+                        case SkinDetailBlendingMode.DIFFERENCE:
+                            _target.EnableKeyword("_LIPS_MAKEUP_DIFF");
+                            break;
+                        case SkinDetailBlendingMode.EXCLUSION:
+                            _target.EnableKeyword("_LIPS_MAKEUP_EXCLUSION");
+                            break;
+                        case SkinDetailBlendingMode.SUBTRACT:
+                            _target.EnableKeyword("_LIPS_MAKEUP_SUBTRACT");
+                            break;
+                        case SkinDetailBlendingMode.NEGATION:
+                            _target.EnableKeyword("_LIPS_MAKEUP_NEGATION");
+                            break;
+                        case SkinDetailBlendingMode.NORMAL:
+                        default:
+                            break;
+                    }
+                }
+
+                EditorGUILayout.LabelField("*These blending mode is more expensive than others", _warningLabel);
+
+                if (_enableUVTiling) { materialEditor.IntegerProperty(_properties.lipsMakeupUVTileIndex, _properties.lipsMakeupUVTileIndex.displayName); }
+            }
+
+            EditorGUILayout.Space(10);
+            EditorGUILayout.LabelField("FacialTatoo Settings", _headerLabel);
+            EditorGUI.BeginChangeCheck();
+            _enableFacialTatooMap = EditorGUILayout.Toggle("FacialTatoo", _enableFacialTatooMap);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(_target, "Updated facialtatoo map enabled");
+
+                if (_enableFacialTatooMap) { _target.EnableKeyword("_FACIAL_TATOOMAP"); }
+                else { _target.DisableKeyword("_FACIAL_TATOOMAP"); }
+
+            }
+
+            if (_enableFacialTatooMap)
+            {
+                materialEditor.TexturePropertySingleLine(_facialTatooMapGUI, _properties.facialTatooMapArray, null);
+                materialEditor.IntegerProperty(_properties.facialTatooMapArrayIndex, _properties.facialTatooMapArrayIndex.displayName);
+                EditorGUI.BeginChangeCheck();
+                _facialTatooMapUV = (SkinDetailMapUV)EditorGUILayout.EnumPopup("UV", _facialTatooMapUV);
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated uv channel of facialTatoomap");
+
+                    switch (_facialTatooMapUV)
+                    {
+                        case SkinDetailMapUV.UV1:
+                            _target.EnableKeyword("_FACIAL_TATOO_UV1");
+                            _target.DisableKeyword("_FACIAL_TATOO_UV2");
+                            _target.DisableKeyword("_FACIAL_TATOO_UV3");
+                            break;
+                        case SkinDetailMapUV.UV2:
+                            _target.DisableKeyword("_FACIAL_TATOO_UV1");
+                            _target.EnableKeyword("_FACIAL_TATOO_UV2");
+                            _target.DisableKeyword("_FACIAL_TATOO_UV3");
+                            break;
+                        case SkinDetailMapUV.UV3:
+                            _target.DisableKeyword("_FACIAL_TATOO_UV1");
+                            _target.DisableKeyword("_FACIAL_TATOO_UV2");
+                            _target.EnableKeyword("_FACIAL_TATOO_UV3");
+                            break;
+                        case SkinDetailMapUV.UV0:
+                        default:
+                            _target.DisableKeyword("_FACIAL_TATOO_UV1");
+                            _target.DisableKeyword("_FACIAL_TATOO_UV2");
+                            _target.DisableKeyword("_FACIAL_TATOO_UV3");
+                            break;
+                    }
+                }
+
+                EditorGUI.BeginChangeCheck();
+                _facialTatooBlendingMode = (SkinDetailBlendingMode)EditorGUILayout.Popup("Blending Mode", (int)_facialTatooBlendingMode, new string[]
+                {
+                    "NORMAL", "DARKEN", "MULTIPLY", "COLOR_BURN", "LINEAR_BURN",
+                    "LIGHTEN", "SCREEN", "COLOR_DODGE", "LINEAR_DODGE",
+                    "*OVERLAY", "*SOFT_LIGHT", "*HARD_LIGHT", "*VIVID_LIGHT", "LINEAR_LIGHT", "LINEAR_LIGHT_ADD_SUB", "*PIN_LIGHT", "HARD_MIX",
+                    "DIFFERENCE", "EXCLUSION", "SUBTRACT", "DIVIDE", "NEGATION"
+                });
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated blending mode of facialTatoo map");
+                    ResetFacialTatooBlendingMode();
+
+                    switch (_facialTatooBlendingMode)
+                    {
+                        case SkinDetailBlendingMode.DARKEN:
+                            _target.EnableKeyword("_FACIAL_TATOO_DARKEN");
+                            break;
+                        case SkinDetailBlendingMode.MULTIPLY:
+                            _target.EnableKeyword("_FACIAL_TATOO_MULTIPLY");
+                            break;
+                        case SkinDetailBlendingMode.COLOR_BURN:
+                            _target.EnableKeyword("_FACIAL_TATOO_BURN");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_BURN:
+                            _target.EnableKeyword("_FACIAL_TATOO_LINEARBURN");
+                            break;
+                        case SkinDetailBlendingMode.LIGHTEN:
+                            _target.EnableKeyword("_FACIAL_TATOO_LIGHTEN");
+                            break;
+                        case SkinDetailBlendingMode.SCREEN:
+                            _target.EnableKeyword("_FACIAL_TATOO_SCREEN");
+                            break;
+                        case SkinDetailBlendingMode.COLOR_DODGE:
+                            _target.EnableKeyword("_FACIAL_TATOO_DODGE");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_DODGE:
+                            _target.EnableKeyword("_FACIAL_TATOO_LINEARDODGE");
+                            break;
+                        case SkinDetailBlendingMode.OVERLAY:
+                            _target.EnableKeyword("_FACIAL_TATOO_OVERLAY");
+                            break;
+                        case SkinDetailBlendingMode.SOFT_LIGHT:
+                            _target.EnableKeyword("_FACIAL_TATOO_SOFTLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.HARD_LIGHT:
+                            _target.EnableKeyword("_FACIAL_TATOO_HARDLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.VIVID_LIGHT:
+                            _target.EnableKeyword("_FACIAL_TATOO_VIVIDLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_LIGHT:
+                            _target.EnableKeyword("_FACIAL_TATOO_LINEARLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_LIGHT_ADD_SUB:
+                            _target.EnableKeyword("_FACIAL_TATOO_LINEARLIGHTADDSUB");
+                            break;
+                        case SkinDetailBlendingMode.PIN_LIGHT:
+                            _target.EnableKeyword("_FACIAL_TATOO_PINLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.HARD_MIX:
+                            _target.EnableKeyword("_FACIAL_TATOO_HARDMIX");
+                            break;
+                        case SkinDetailBlendingMode.DIFFERENCE:
+                            _target.EnableKeyword("_FACIAL_TATOO_DIFF");
+                            break;
+                        case SkinDetailBlendingMode.EXCLUSION:
+                            _target.EnableKeyword("_FACIAL_TATOO_EXCLUSION");
+                            break;
+                        case SkinDetailBlendingMode.SUBTRACT:
+                            _target.EnableKeyword("_FACIAL_TATOO_SUBTRACT");
+                            break;
+                        case SkinDetailBlendingMode.NEGATION:
+                            _target.EnableKeyword("_FACIAL_TATOO_NEGATION");
+                            break;
+                        case SkinDetailBlendingMode.NORMAL:
+                        default:
+                            break;
+                    }
+                }
+
+                EditorGUILayout.LabelField("*These blending mode is more expensive than others", _warningLabel);
+
+                EditorGUI.BeginChangeCheck();
+                _facialTatooAsymmetry = (AsymmetricStamping)EditorGUILayout.EnumPopup("AsymmetricFacialTatoo", _facialTatooAsymmetry);
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated asymmeric facial tatoo");
+
+                    switch (_facialTatooAsymmetry)
+                    {
+                        case AsymmetricStamping.LEFT:
+                            _target.EnableKeyword("_FACIAL_TATOO_LEFT");
+                            _target.DisableKeyword("_FACIAL_TATOO_RIGHT");
+                            break;
+                        case AsymmetricStamping.RIGHT:
+                            _target.EnableKeyword("_FACIAL_TATOO_RIGHT");
+                            _target.DisableKeyword("_FACIAL_TATOO_LEFT");
+                            break;
+                        case AsymmetricStamping.BOTH:
+                            _target.DisableKeyword("_FACIAL_TATOO_LEFT");
+                            _target.DisableKeyword("_FACIAL_TATOO_RIGHT");
+                            break;
+                    }
+                }
+
+                if (_enableUVTiling) { materialEditor.IntegerProperty(_properties.facialTatooUVTileIndex, _properties.facialTatooUVTileIndex.displayName); }
+            }
+
+            EditorGUILayout.Space(10);
+            EditorGUILayout.LabelField("FacialMarking Settings", _headerLabel);
+            EditorGUI.BeginChangeCheck();
+            _enableFacialMarkingMap = EditorGUILayout.Toggle("FacialMarking", _enableFacialMarkingMap);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(_target, "Updated facialmarking map enabled");
+
+                if (_enableFacialMarkingMap) { _target.EnableKeyword("_FACIAL_MARKINGMAP"); }
+                else { _target.DisableKeyword("_FACIAL_MARKINGMAP"); }
+
+            }
+
+            if (_enableFacialMarkingMap)
+            {
+                materialEditor.TexturePropertySingleLine(_facialMarkingMapGUI, _properties.facialMarkingMapArray, null);
+                materialEditor.IntegerProperty(_properties.facialMarkingMapArrayIndex, _properties.facialMarkingMapArrayIndex.displayName);
+                EditorGUI.BeginChangeCheck();
+                _facialMarkingMapUV = (SkinDetailMapUV)EditorGUILayout.EnumPopup("UV", _facialMarkingMapUV);
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated uv channel of facialMarkingmap");
+
+                    switch (_facialMarkingMapUV)
+                    {
+                        case SkinDetailMapUV.UV1:
+                            _target.EnableKeyword("_FACIAL_MARKING_UV1");
+                            _target.DisableKeyword("_FACIAL_MARKING_UV2");
+                            _target.DisableKeyword("_FACIAL_MARKING_UV3");
+                            break;
+                        case SkinDetailMapUV.UV2:
+                            _target.DisableKeyword("_FACIAL_MARKING_UV1");
+                            _target.EnableKeyword("_FACIAL_MARKING_UV2");
+                            _target.DisableKeyword("_FACIAL_MARKING_UV3");
+                            break;
+                        case SkinDetailMapUV.UV3:
+                            _target.DisableKeyword("_FACIAL_MARKING_UV1");
+                            _target.DisableKeyword("_FACIAL_MARKING_UV2");
+                            _target.EnableKeyword("_FACIAL_MARKING_UV3");
+                            break;
+                        case SkinDetailMapUV.UV0:
+                        default:
+                            _target.DisableKeyword("_FACIAL_MARKING_UV1");
+                            _target.DisableKeyword("_FACIAL_MARKING_UV2");
+                            _target.DisableKeyword("_FACIAL_MARKING_UV3");
+                            break;
+                    }
+                }
+
+                EditorGUI.BeginChangeCheck();
+                _facialMarkingBlendingMode = (SkinDetailBlendingMode)EditorGUILayout.Popup("Blending Mode", (int)_facialMarkingBlendingMode, new string[]
+                {
+                    "NORMAL", "DARKEN", "MULTIPLY", "COLOR_BURN", "LINEAR_BURN",
+                    "LIGHTEN", "SCREEN", "COLOR_DODGE", "LINEAR_DODGE",
+                    "*OVERLAY", "*SOFT_LIGHT", "*HARD_LIGHT", "*VIVID_LIGHT", "LINEAR_LIGHT", "LINEAR_LIGHT_ADD_SUB", "*PIN_LIGHT", "HARD_MIX",
+                    "DIFFERENCE", "EXCLUSION", "SUBTRACT", "DIVIDE", "NEGATION"
+                });
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated blending mode of facialMarking map");
+                    ResetFacialMarkingBlendingMode();
+
+                    switch (_facialMarkingBlendingMode)
+                    {
+                        case SkinDetailBlendingMode.DARKEN:
+                            _target.EnableKeyword("_FACIAL_MARKING_DARKEN");
+                            break;
+                        case SkinDetailBlendingMode.MULTIPLY:
+                            _target.EnableKeyword("_FACIAL_MARKING_MULTIPLY");
+                            break;
+                        case SkinDetailBlendingMode.COLOR_BURN:
+                            _target.EnableKeyword("_FACIAL_MARKING_BURN");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_BURN:
+                            _target.EnableKeyword("_FACIAL_MARKING_LINEARBURN");
+                            break;
+                        case SkinDetailBlendingMode.LIGHTEN:
+                            _target.EnableKeyword("_FACIAL_MARKING_LIGHTEN");
+                            break;
+                        case SkinDetailBlendingMode.SCREEN:
+                            _target.EnableKeyword("_FACIAL_MARKING_SCREEN");
+                            break;
+                        case SkinDetailBlendingMode.COLOR_DODGE:
+                            _target.EnableKeyword("_FACIAL_MARKING_DODGE");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_DODGE:
+                            _target.EnableKeyword("_FACIAL_MARKING_LINEARDODGE");
+                            break;
+                        case SkinDetailBlendingMode.OVERLAY:
+                            _target.EnableKeyword("_FACIAL_MARKING_OVERLAY");
+                            break;
+                        case SkinDetailBlendingMode.SOFT_LIGHT:
+                            _target.EnableKeyword("_FACIAL_MARKING_SOFTLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.HARD_LIGHT:
+                            _target.EnableKeyword("_FACIAL_MARKING_HARDLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.VIVID_LIGHT:
+                            _target.EnableKeyword("_FACIAL_MARKING_VIVIDLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_LIGHT:
+                            _target.EnableKeyword("_FACIAL_MARKING_LINEARLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.LINEAR_LIGHT_ADD_SUB:
+                            _target.EnableKeyword("_FACIAL_MARKING_LINEARLIGHTADDSUB");
+                            break;
+                        case SkinDetailBlendingMode.PIN_LIGHT:
+                            _target.EnableKeyword("_FACIAL_MARKING_PINLIGHT");
+                            break;
+                        case SkinDetailBlendingMode.HARD_MIX:
+                            _target.EnableKeyword("_FACIAL_MARKING_HARDMIX");
+                            break;
+                        case SkinDetailBlendingMode.DIFFERENCE:
+                            _target.EnableKeyword("_FACIAL_MARKING_DIFF");
+                            break;
+                        case SkinDetailBlendingMode.EXCLUSION:
+                            _target.EnableKeyword("_FACIAL_MARKING_EXCLUSION");
+                            break;
+                        case SkinDetailBlendingMode.SUBTRACT:
+                            _target.EnableKeyword("_FACIAL_MARKING_SUBTRACT");
+                            break;
+                        case SkinDetailBlendingMode.NEGATION:
+                            _target.EnableKeyword("_FACIAL_MARKING_NEGATION");
+                            break;
+                        case SkinDetailBlendingMode.NORMAL:
+                        default:
+                            break;
+                    }
+                }
+
+                EditorGUILayout.LabelField("*These blending mode is more expensive than others", _warningLabel);
+
+                EditorGUI.BeginChangeCheck();
+                _facialMarkingAsymmetry = (AsymmetricStamping)EditorGUILayout.EnumPopup("AsymmetricFacialMarking", _facialMarkingAsymmetry);
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated asymmeric facial marking");
+
+                    switch (_facialMarkingAsymmetry)
+                    {
+                        case AsymmetricStamping.LEFT:
+                            _target.EnableKeyword("_FACIAL_MARKING_LEFT");
+                            _target.DisableKeyword("_FACIAL_MARKING_RIGHT");
+                            break;
+                        case AsymmetricStamping.RIGHT:
+                            _target.EnableKeyword("_FACIAL_MARKING_RIGHT");
+                            _target.DisableKeyword("_FACIAL_MARKING_LEFT");
+                            break;
+                        case AsymmetricStamping.BOTH:
+                            _target.DisableKeyword("_FACIAL_MARKING_LEFT");
+                            _target.DisableKeyword("_FACIAL_MARKING_RIGHT");
+                            break;
+                    }
+                }
+
+                if (_enableUVTiling) { materialEditor.IntegerProperty(_properties.facialMarkingUVTileIndex, _properties.facialMarkingUVTileIndex.displayName); }
+            }
+
+            EditorGUILayout.Space(10);
+            EditorGUILayout.LabelField("Mouth Settings", _headerLabel);
+            EditorGUI.BeginChangeCheck();
+            _enableClearCoat = EditorGUILayout.Toggle("Clear Coat", _enableClearCoat);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(_target, "Updated clearcoat enabled");
+
+                if (_enableClearCoat) { _target.EnableKeyword("_CLEARCOAT"); }
+                else { _target.DisableKeyword("_CLEARCOAT"); }
+            }
+
+            if (_enableClearCoat)
+            {
+                materialEditor.RangeProperty(_properties.clearCoatMask, _properties.clearCoatMask.displayName);
+                materialEditor.RangeProperty(_properties.clearCoatSmoothness, _properties.clearCoatSmoothness.displayName);
+
+                if (_enableUVTiling) { materialEditor.IntegerProperty(_properties.mouthUVTileIndex, _properties.mouthUVTileIndex.displayName); }
+            }
+
+            EditorGUILayout.Space(10);
+            EditorGUILayout.LabelField("Hair Color", _headerLabel);
+            EditorGUI.BeginChangeCheck();
+            _enableHairColor = EditorGUILayout.Toggle("Hair Color", _enableHairColor);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(_target, "Updated hair color enabled");
+
+                if (_enableHairColor) { _target.EnableKeyword("_HAIRCOLOR"); }
+                else { _target.DisableKeyword("_HAIRCOLOR"); }
+            }
+
+            if (_enableHairColor)
+            {
+                materialEditor.ColorProperty(_properties.hairColor1, _properties.hairColor1.displayName);
+                materialEditor.ColorProperty(_properties.hairColor2, _properties.hairColor2.displayName);
+
+                if (_enableUVTiling) { materialEditor.IntegerProperty(_properties.hairUVTileIndex, _properties.hairUVTileIndex.displayName); }
+            }
+
+            EditorGUILayout.Space(10);
+            EditorGUILayout.LabelField("Common Settings", _headerLabel);
+            EditorGUILayout.LabelField("UV0");
+
             if (_enableTex2DArray) { materialEditor.TextureScaleOffsetProperty(_properties.baseMapArray); }
             else { materialEditor.TextureScaleOffsetProperty(_properties.baseMap); }
+
+            if (_eyesMakeupMapUV == SkinDetailMapUV.UV1 || _blushMakeupMapUV == SkinDetailMapUV.UV1 || _lipsMakeupMapUV == SkinDetailMapUV.UV1)
+            {
+                EditorGUILayout.LabelField("UV1");
+                materialEditor.TextureScaleOffsetProperty(_properties.eyesMakeupMapArray);
+            }
+
+            if (_eyesMakeupMapUV == SkinDetailMapUV.UV2 || _blushMakeupMapUV == SkinDetailMapUV.UV2 || _lipsMakeupMapUV == SkinDetailMapUV.UV2)
+            {
+                EditorGUILayout.LabelField("UV2");
+                materialEditor.TextureScaleOffsetProperty(_properties.blushMakeupMapArray);
+            }
+
+            if (_eyesMakeupMapUV == SkinDetailMapUV.UV3 || _blushMakeupMapUV == SkinDetailMapUV.UV3 || _lipsMakeupMapUV == SkinDetailMapUV.UV3)
+            {
+                EditorGUILayout.LabelField("UV3");
+                materialEditor.TextureScaleOffsetProperty(_properties.lipsMakeupMapArray);
+            }
         }
 
         if (_renderMode == RenderMode.CUSTOM_LIT)
@@ -416,7 +1936,7 @@ public class LuckyAvatarShaderGUI : ShaderGUI
 
             if (_isOpenLightSettings)
             {
-                EditorGUILayout.LabelField("Gradient Settings", _centerLabel);
+                EditorGUILayout.LabelField("Gradient Settings", _headerLabel);
                 EditorGUI.BeginChangeCheck();
                 _enableGradient = EditorGUILayout.Toggle("Enable Gradient", _enableGradient);
 
@@ -498,7 +2018,7 @@ public class LuckyAvatarShaderGUI : ShaderGUI
                 }
 
                 EditorGUILayout.Space(10);
-                EditorGUILayout.LabelField("MainLight Settings", _centerLabel);
+                EditorGUILayout.LabelField("MainLight Settings", _headerLabel);
                 EditorGUI.BeginChangeCheck();
                 _enableDiffuseColor = EditorGUILayout.Toggle("Enable Diffuse Color", _enableDiffuseColor);
 
@@ -576,7 +2096,7 @@ public class LuckyAvatarShaderGUI : ShaderGUI
                 }
 
                 EditorGUILayout.Space(10);
-                EditorGUILayout.LabelField("RimLight Settings", _centerLabel);
+                EditorGUILayout.LabelField("RimLight Settings", _headerLabel);
                 EditorGUI.BeginChangeCheck();
                 _enableRimLight = EditorGUILayout.Toggle("Enable Rim Light", _enableRimLight);
 
@@ -615,6 +2135,54 @@ public class LuckyAvatarShaderGUI : ShaderGUI
                 }
 
                 EditorGUILayout.Space(10);
+                EditorGUILayout.LabelField("Anisotropic Highlight", _headerLabel);
+                EditorGUI.BeginChangeCheck();
+                _enableAnisoHighlight = EditorGUILayout.Toggle("Anisotropic Highlight", _enableAnisoHighlight);
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated aniso highlight enabled");
+
+                    if (_enableAnisoHighlight) { _target.EnableKeyword("_ANISOTROPIC_HIGHLIGHT"); }
+                    else { _target.DisableKeyword("_ANISOTROPIC_HIGHLIGHT"); }
+                }
+
+                if (_enableAnisoHighlight)
+                {
+                    materialEditor.ColorProperty(_properties.anisoHighlightColor, _properties.anisoHighlightColor.displayName);
+                    materialEditor.RangeProperty(_properties.anisoOffset, _properties.anisoOffset.displayName);
+                    materialEditor.FloatProperty(_properties.anisoPower, _properties.anisoPower.displayName);
+                    materialEditor.RangeProperty(_properties.anisoIntensity, _properties.anisoIntensity.displayName);
+
+                    if (_enableUVTiling) { materialEditor.IntegerProperty(_properties.hairUVTileIndex, _properties.hairUVTileIndex.displayName); }
+                }
+
+                EditorGUILayout.Space(10);
+                EditorGUILayout.LabelField("Mouth AO Gradient Map", _headerLabel);
+                EditorGUI.BeginChangeCheck();
+                _enableMouthShadow = EditorGUILayout.Toggle("Mouth Shadow", _enableMouthShadow);
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_target, "Updated mouth shadow enabled");
+
+                    if (_enableMouthShadow) { _target.EnableKeyword("_MOUTH_SHADOW"); }
+                    else { _target.DisableKeyword("_MOUTH_SHADOW"); }
+                }
+
+                if (_enableMouthShadow)
+                {
+                    var scale = _properties.mouthScale.vectorValue;
+                    scale.y = EditorGUILayout.FloatField("LocalScale min z", scale.y);
+                    scale.w = EditorGUILayout.FloatField("LocalScale max z", scale.w);
+                    _properties.mouthScale.vectorValue = scale;
+                    materialEditor.RangeProperty(_properties.mouthAOPower, _properties.mouthAOPower.displayName);
+                    materialEditor.RangeProperty(_properties.mouthAOIntensity, _properties.mouthAOIntensity.displayName);
+
+                    if (_enableUVTiling) { materialEditor.IntegerProperty(_properties.mouthUVTileIndex, _properties.mouthUVTileIndex.displayName); }
+                }
+
+                EditorGUILayout.Space(10);
                 EditorGUI.BeginChangeCheck();
                 _enableReflection = EditorGUILayout.Toggle("ReflectionProbe", _enableReflection);
 
@@ -625,6 +2193,7 @@ public class LuckyAvatarShaderGUI : ShaderGUI
                     if (_enableReflection) { _target.EnableKeyword("_REFLECTION"); }
                     else { _target.DisableKeyword("_REFLECTION"); }
                 }
+
             }
         }
 
@@ -649,22 +2218,31 @@ public class LuckyAvatarShaderGUI : ShaderGUI
                 else { _target.DisableKeyword("_TEX_ARRAY"); }
             }
 
-            if (_enableTex2DArray)
+            EditorGUI.BeginChangeCheck();
+            _enableUVTiling = EditorGUILayout.Toggle("UV Tiling", _enableUVTiling);
+
+            if (EditorGUI.EndChangeCheck())
             {
+                Undo.RecordObject(_target, "Updated uv tiling enabled");
+
+                if (_enableUVTiling) { _target.EnableKeyword("_UVTILING"); }
+                else { _target.DisableKeyword("_UVTILING"); }
+            }
+
+            if (_enableUVTiling)
+            {
+                materialEditor.IntegerProperty(_properties.uvTiles, _properties.uvTiles.displayName);
+                materialEditor.IntegerProperty(_properties.uvCutoff, _properties.uvCutoff.displayName);
+
                 EditorGUI.BeginChangeCheck();
-                _enableUVTiling = EditorGUILayout.Toggle("UV Tiling", _enableUVTiling);
+                _enableOneTexture = EditorGUILayout.Toggle("Using one texture", _enableOneTexture);
 
                 if (EditorGUI.EndChangeCheck())
                 {
-                    Undo.RecordObject(_target, "Updated uv tiling enabled");
+                    Undo.RecordObject(_target, "Updated one texture enabled");
 
-                    if (_enableUVTiling) { _target.EnableKeyword("_UVTILING"); }
-                    else { _target.DisableKeyword("_UVTILING"); }
-                }
-
-                if (_enableUVTiling)
-                {
-                    materialEditor.IntegerProperty(_properties.uvTilingX, _properties.uvTilingX.displayName);
+                    if (_enableOneTexture) { _target.EnableKeyword("_ONE_TEXTURE"); }
+                    else { _target.DisableKeyword("_ONE_TEXTURE"); }
                 }
             }
 
@@ -728,6 +2306,21 @@ public class LuckyAvatarShaderGUI : ShaderGUI
             _properties.normalMapArray.textureValue = null;
             _properties.debugMipmapTexArray.textureValue = null;
         }
+
+        if (!_enableMatCapMap)
+        {
+            //_properties.matCapMap.textureValue = null;
+        }
+
+        if (!_enableEyesMakeupMap) { _properties.eyesMakeupMapArray.textureValue = null; }
+
+        if (!_enableBlushMakeupMap) { _properties.blushMakeupMapArray.textureValue = null; }
+
+        if (!_enableLipsMakeupMap) { _properties.lipsMakeupMapArray.textureValue = null; }
+
+        if (!_enableFacialTatooMap) { _properties.facialTatooMapArray.textureValue = null; }
+
+        if (!_enableFacialMarkingMap) { _properties.facialMarkingMapArray.textureValue = null; }
     }
 
     private void UpdateSurfaceType()
@@ -740,6 +2333,7 @@ public class LuckyAvatarShaderGUI : ShaderGUI
                 _target.SetInt("_SrcBlend", (int)BlendMode.One);
                 _target.SetInt("_DstBlend", (int)BlendMode.Zero);
                 _target.SetInt("_ZWrite", 1);
+                _target.SetFloat("_Cutoff", 0);
                 break;
             case SurfaceType.Cutout:
                 _target.renderQueue = (int)RenderQueue.AlphaTest;
@@ -754,6 +2348,7 @@ public class LuckyAvatarShaderGUI : ShaderGUI
                 _target.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
                 _target.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
                 _target.SetInt("_ZWrite", 0);
+                _target.SetFloat("_Cutoff", 0);
                 break;
         }
     }
@@ -768,6 +2363,7 @@ public class LuckyAvatarShaderGUI : ShaderGUI
                 _target.DisableKeyword(CUSTOM_LIT_KEYWORD);
                 _target.DisableKeyword("_NORMALMAP");
                 _target.DisableKeyword("_MARMAP");
+                _target.DisableKeyword("_MATCAPMAP");
                 _target.DisableKeyword("_REFLECTION");
                 _target.DisableKeyword("_DIFFUSE_COLOR");
                 _target.DisableKeyword("_RIM_LIGHT");
@@ -829,6 +2425,131 @@ public class LuckyAvatarShaderGUI : ShaderGUI
         }
 
         EditorPrefs.SetInt(key, (int)state);
+    }
+
+    private void ResetEyesMakeupBlendingMode()
+    {
+        _target.DisableKeyword("_EYES_MAKEUP_BURN");
+        _target.DisableKeyword("_EYES_MAKEUP_DARKEN");
+        _target.DisableKeyword("_EYES_MAKEUP_DIFF");
+        _target.DisableKeyword("_EYES_MAKEUP_DODGE");
+        _target.DisableKeyword("_EYES_MAKEUP_DIVIDE");
+        _target.DisableKeyword("_EYES_MAKEUP_EXCLUSION");
+        _target.DisableKeyword("_EYES_MAKEUP_HARDLIGHT");
+        _target.DisableKeyword("_EYES_MAKEUP_HARDMIX");
+        _target.DisableKeyword("_EYES_MAKEUP_LIGHTEN");
+        _target.DisableKeyword("_EYES_MAKEUP_LINEARBURN");
+        _target.DisableKeyword("_EYES_MAKEUP_LINEARDODGE");
+        _target.DisableKeyword("_EYES_MAKEUP_LINEARLIGHT");
+        _target.DisableKeyword("_EYES_MAKEUP_LINEARLIGHTADDSUB");
+        _target.DisableKeyword("_EYES_MAKEUP_MULTIPLY");
+        _target.DisableKeyword("_EYES_MAKEUP_NEGATION");
+        _target.DisableKeyword("_EYES_MAKEUP_SCREEN");
+        _target.DisableKeyword("_EYES_MAKEUP_OVERLAY");
+        _target.DisableKeyword("_EYES_MAKEUP_PINLIGHT");
+        _target.DisableKeyword("_EYES_MAKEUP_SOFTLIGHT");
+        _target.DisableKeyword("_EYES_MAKEUP_VIVIDLIGHT");
+        _target.DisableKeyword("_EYES_MAKEUP_SUBTRACT");
+    }
+
+    private void ResetBlushMakeupBlendingMode()
+    {
+        _target.DisableKeyword("_BLUSH_MAKEUP_BURN");
+        _target.DisableKeyword("_BLUSH_MAKEUP_DARKEN");
+        _target.DisableKeyword("_BLUSH_MAKEUP_DIFF");
+        _target.DisableKeyword("_BLUSH_MAKEUP_DODGE");
+        _target.DisableKeyword("_BLUSH_MAKEUP_DIVIDE");
+        _target.DisableKeyword("_BLUSH_MAKEUP_EXCLUSION");
+        _target.DisableKeyword("_BLUSH_MAKEUP_HARDLIGHT");
+        _target.DisableKeyword("_BLUSH_MAKEUP_HARDMIX");
+        _target.DisableKeyword("_BLUSH_MAKEUP_LIGHTEN");
+        _target.DisableKeyword("_BLUSH_MAKEUP_LINEARBURN");
+        _target.DisableKeyword("_BLUSH_MAKEUP_LINEARDODGE");
+        _target.DisableKeyword("_BLUSH_MAKEUP_LINEARLIGHT");
+        _target.DisableKeyword("_BLUSH_MAKEUP_LINEARLIGHTADDSUB");
+        _target.DisableKeyword("_BLUSH_MAKEUP_MULTIPLY");
+        _target.DisableKeyword("_BLUSH_MAKEUP_NEGATION");
+        _target.DisableKeyword("_BLUSH_MAKEUP_SCREEN");
+        _target.DisableKeyword("_BLUSH_MAKEUP_OVERLAY");
+        _target.DisableKeyword("_BLUSH_MAKEUP_PINLIGHT");
+        _target.DisableKeyword("_BLUSH_MAKEUP_SOFTLIGHT");
+        _target.DisableKeyword("_BLUSH_MAKEUP_VIVIDLIGHT");
+        _target.DisableKeyword("_BLUSH_MAKEUP_SUBTRACT");
+    }
+
+    private void ResetLipsMakeupBlendingMode()
+    {
+        _target.DisableKeyword("_LIPS_MAKEUP_BURN");
+        _target.DisableKeyword("_LIPS_MAKEUP_DARKEN");
+        _target.DisableKeyword("_LIPS_MAKEUP_DIFF");
+        _target.DisableKeyword("_LIPS_MAKEUP_DODGE");
+        _target.DisableKeyword("_LIPS_MAKEUP_DIVIDE");
+        _target.DisableKeyword("_LIPS_MAKEUP_EXCLUSION");
+        _target.DisableKeyword("_LIPS_MAKEUP_HARDLIGHT");
+        _target.DisableKeyword("_LIPS_MAKEUP_HARDMIX");
+        _target.DisableKeyword("_LIPS_MAKEUP_LIGHTEN");
+        _target.DisableKeyword("_LIPS_MAKEUP_LINEARBURN");
+        _target.DisableKeyword("_LIPS_MAKEUP_LINEARDODGE");
+        _target.DisableKeyword("_LIPS_MAKEUP_LINEARLIGHT");
+        _target.DisableKeyword("_LIPS_MAKEUP_LINEARLIGHTADDSUB");
+        _target.DisableKeyword("_LIPS_MAKEUP_MULTIPLY");
+        _target.DisableKeyword("_LIPS_MAKEUP_NEGATION");
+        _target.DisableKeyword("_LIPS_MAKEUP_SCREEN");
+        _target.DisableKeyword("_LIPS_MAKEUP_OVERLAY");
+        _target.DisableKeyword("_LIPS_MAKEUP_PINLIGHT");
+        _target.DisableKeyword("_LIPS_MAKEUP_SOFTLIGHT");
+        _target.DisableKeyword("_LIPS_MAKEUP_VIVIDLIGHT");
+        _target.DisableKeyword("_LIPS_MAKEUP_SUBTRACT");
+    }
+
+    private void ResetFacialTatooBlendingMode()
+    {
+        _target.DisableKeyword("_FACIAL_TATOO_BURN");
+        _target.DisableKeyword("_FACIAL_TATOO_DARKEN");
+        _target.DisableKeyword("_FACIAL_TATOO_DIFF");
+        _target.DisableKeyword("_FACIAL_TATOO_DODGE");
+        _target.DisableKeyword("_FACIAL_TATOO_DIVIDE");
+        _target.DisableKeyword("_FACIAL_TATOO_EXCLUSION");
+        _target.DisableKeyword("_FACIAL_TATOO_HARDLIGHT");
+        _target.DisableKeyword("_FACIAL_TATOO_HARDMIX");
+        _target.DisableKeyword("_FACIAL_TATOO_LIGHTEN");
+        _target.DisableKeyword("_FACIAL_TATOO_LINEARBURN");
+        _target.DisableKeyword("_FACIAL_TATOO_LINEARDODGE");
+        _target.DisableKeyword("_FACIAL_TATOO_LINEARLIGHT");
+        _target.DisableKeyword("_FACIAL_TATOO_LINEARLIGHTADDSUB");
+        _target.DisableKeyword("_FACIAL_TATOO_MULTIPLY");
+        _target.DisableKeyword("_FACIAL_TATOO_NEGATION");
+        _target.DisableKeyword("_FACIAL_TATOO_SCREEN");
+        _target.DisableKeyword("_FACIAL_TATOO_OVERLAY");
+        _target.DisableKeyword("_FACIAL_TATOO_PINLIGHT");
+        _target.DisableKeyword("_FACIAL_TATOO_SOFTLIGHT");
+        _target.DisableKeyword("_FACIAL_TATOO_VIVIDLIGHT");
+        _target.DisableKeyword("_FACIAL_TATOO_SUBTRACT");
+    }
+
+    private void ResetFacialMarkingBlendingMode()
+    {
+        _target.DisableKeyword("_FACIAL_MARKING_BURN");
+        _target.DisableKeyword("_FACIAL_MARKING_DARKEN");
+        _target.DisableKeyword("_FACIAL_MARKING_DIFF");
+        _target.DisableKeyword("_FACIAL_MARKING_DODGE");
+        _target.DisableKeyword("_FACIAL_MARKING_DIVIDE");
+        _target.DisableKeyword("_FACIAL_MARKING_EXCLUSION");
+        _target.DisableKeyword("_FACIAL_MARKING_HARDLIGHT");
+        _target.DisableKeyword("_FACIAL_MARKING_HARDMIX");
+        _target.DisableKeyword("_FACIAL_MARKING_LIGHTEN");
+        _target.DisableKeyword("_FACIAL_MARKING_LINEARBURN");
+        _target.DisableKeyword("_FACIAL_MARKING_LINEARDODGE");
+        _target.DisableKeyword("_FACIAL_MARKING_LINEARLIGHT");
+        _target.DisableKeyword("_FACIAL_MARKING_LINEARLIGHTADDSUB");
+        _target.DisableKeyword("_FACIAL_MARKING_MULTIPLY");
+        _target.DisableKeyword("_FACIAL_MARKING_NEGATION");
+        _target.DisableKeyword("_FACIAL_MARKING_SCREEN");
+        _target.DisableKeyword("_FACIAL_MARKING_OVERLAY");
+        _target.DisableKeyword("_FACIAL_MARKING_PINLIGHT");
+        _target.DisableKeyword("_FACIAL_MARKING_SOFTLIGHT");
+        _target.DisableKeyword("_FACIAL_MARKING_VIVIDLIGHT");
+        _target.DisableKeyword("_FACIAL_MARKING_SUBTRACT");
     }
 
 }

@@ -18,8 +18,9 @@ Material:
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
-  m_CustomRenderQueue: -1
-  stringTagMap: {}
+  m_CustomRenderQueue: 2000
+  stringTagMap:
+    RenderType: Opaque
   disabledShaderPasses: []
   m_LockedProperties: 
   m_SavedProperties:
@@ -41,11 +42,27 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _FacialDetailMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _FacialDetailMapArray:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _HeightMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _MARMap:
         m_Texture: {fileID: 2800000, guid: 064dca7f26224f44d80e58a7484aa5eb, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MARMapArray:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MatCapMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -57,20 +74,37 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _SkinDetailMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SkinDetailMapArray:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints:
+    - _AnisoUVTileIndex: 0
     - _BaseMapIndex: 0
+    - _FacialDetailMapArrayIndex: 0
     - _MARMapIndex: 0
     - _NormalMapIndex: 0
+    - _SkinDetailMapArrayIndex: 0
+    - _UVCutoff: 0
+    - _UVTiles: 4
     - _UVTilingX: 4
     m_Floats:
+    - _AnisoIntensity: 0.2
+    - _AnisoOffset: -0.3
+    - _AnisoPower: 30
     - _Cull: 2
-    - _Cutoff: 0.5
+    - _Cutoff: 0
     - _DiffuseIntensity: 1
     - _DiffuseIntensity2: 1
     - _DstBlend: 0
     - _GradientAngle: 0
     - _GradientOffset: 0
     - _GradientPower: 1
+    - _MatCapBlend: 0.5
     - _Metallic: 0
     - _NormalStrength: 1
     - _Occlusion: 1
@@ -78,11 +112,13 @@ Material:
     - _RimIntensity2: 1
     - _RimPower: 4
     - _RimPower2: 4
-    - _Smoothness: 0
+    - _Smoothness: 1
     - _SrcBlend: 1
     - _ZWrite: 1
     m_Colors:
+    - _AnisoHighlightColor: {r: 1, g: 1, b: 1, a: 1}
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _DeepLayerColor: {r: 0.8584906, g: 0.6533167, b: 0.6533167, a: 1}
     - _DiffuseColor: {r: 1, g: 1, b: 1, a: 1}
     - _DiffuseColor2: {r: 1, g: 1, b: 1, a: 1}
     - _EulerLightDirection: {r: 90, g: 0, b: 0, a: 0}
@@ -90,8 +126,10 @@ Material:
     - _GradientScale: {r: 0, g: 0, b: 1, a: 1}
     - _LightDirection: {r: 0, g: 0, b: 0, a: 0}
     - _LightDirection2: {r: 0, g: 0, b: 0, a: 0}
+    - _MatCapHSVShift: {r: 0, g: 0, b: 0, a: 0}
     - _RimColor: {r: 1, g: 1, b: 1, a: 1}
     - _RimColor2: {r: 1, g: 1, b: 1, a: 1}
+    - _SkinColor: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []
 --- !u!114 &97827558328895905
 MonoBehaviour:
